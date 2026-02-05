@@ -1,0 +1,23 @@
+<div class="flex items-center justify-center min-h-screen bg-surface-50 dark:bg-surface-950">
+  <p-card header="OpenShort Login" [style]="{ width: '25rem' }" styleClass="shadow-lg">
+    <div class="flex flex-col gap-4">
+      <!-- Error Message -->
+      <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage"></p-message>
+
+      <div class="flex flex-col gap-2">
+        <label for="email" class="text-surface-900 dark:text-surface-0 font-medium">Email</label>
+        <input pInputText id="email" type="email" [(ngModel)]="email" class="w-full" placeholder="your@email.com"
+          [disabled]="loading" />
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Password</label>
+        <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="******"
+          [disabled]="loading" (keyup.enter)="onLogin()" />
+      </div>
+
+      <p-button label="Sign In" [loading]="loading" [disabled]="!email || !password" (onClick)="onLogin()"
+        styleClass="w-full" />
+    </div>
+  </p-card>
+</div>

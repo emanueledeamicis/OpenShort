@@ -1,0 +1,74 @@
+<div class="px-6 py-8">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-0">My Domains</h1>
+        <p-button label="Add Domain" icon="pi pi-plus" severity="secondary" (onClick)="openCreateDialog()" />
+    </div>
+
+    <div
+        class="card bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden">
+        <p-table [value]="domains" [loading]="loading" [tableStyle]="{ 'min-width': '50rem' }">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Host</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-domain>
+                <tr>
+                    <td class="font-medium text-surface-900 dark:text-surface-0">
+                        <div class="flex items-center gap-3">
+                            <span
+                                class="w-10 h-10 rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-surface-500">
+                                <i class="pi pi-globe text-xl"></i>
+                            </span>
+                            {{ domain.host }}
+                        </div>
+                    </td>
+                    <td>
+                        <span
+                            [class]="'px-2 py-1 rounded text-xs font-bold ' + (domain.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')">
+                            {{ domain.isActive ? 'Active' : 'Inactive' }}
+                        </span>
+                    </td>
+                    <td>
+                        <p-button icon="pi pi-trash" severity="danger" [text]="true"
+                            (onClick)="deleteDomain(domain.id)" />
+                    </td>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="emptymessage">
+                <tr>
+                    <td colspan="3" class="text-center py-8 text-surface-500">No domains configured. Add your first
+                        domain!</td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </div>
+</div>
+
+<!-- Create Domain Dialog -->
+<p-dialog header="Add New Domain" [(visible)]="showDialog" [modal]="true" [style]="{ width: '400px' }"
+    [draggable]="false" [resizable]="false">
+    <form [formGroup]="domainForm" (ngSubmit)="saveDomain()">
+        <!-- Error Message -->
+        <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage" styleClass="mb-4"></p-message>
+
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-2">
+                <label for="host" class="font-medium">Domain Host *</label>
+                <input pInputText id="host" formControlName="host" placeholder="example.com" class="w-full"
+                    [disabled]="saving" />
+                <small class="text-red-500" *ngIf="domainForm.get('host')?.invalid && domainForm.get('host')?.touched">
+                    Valid domain required (e.g., example.com)
+                </small>
+                <small class="text-surface-500">Enter domain without protocol (http://)</small>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-4">
+            <p-button label="Cancel" severity="secondary" (onClick)="closeDialog()" [text]="true" [disabled]="saving" />
+            <p-button label="Add" type="submit" [loading]="saving" [disabled]="domainForm.invalid || saving" />
+        </div>
+    </form>
+</p-dialog>

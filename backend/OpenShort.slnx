@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenShort.Api/OpenShort.Api.csproj" />
+    <Project Path="src/OpenShort.Core/OpenShort.Core.csproj" />
+    <Project Path="src/OpenShort.Infrastructure/OpenShort.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenShort.Tests/OpenShort.Tests.csproj" />
+  </Folder>
+</Solution>

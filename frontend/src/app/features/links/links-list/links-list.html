@@ -1,0 +1,104 @@
+<div class="px-6 py-8">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-0">My Links</h1>
+        <p-button label="New Link" icon="pi pi-plus" (onClick)="openCreateDialog()" />
+    </div>
+
+    <div
+        class="card bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden">
+        <p-table [value]="links" [loading]="loading" [tableStyle]="{ 'min-width': '50rem' }">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Slug</th>
+                    <th>Destination</th>
+                    <th>Domain</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-link>
+                <tr>
+                    <td class="font-medium text-primary-500">{{ link.slug }}</td>
+                    <td class="text-surface-600 dark:text-surface-400 truncate max-w-xs">{{ link.destinationUrl }}</td>
+                    <td>{{ link.domain }}</td>
+                    <td>
+                        <span
+                            [class]="'px-2 py-1 rounded text-xs font-bold ' + (link.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')">
+                            {{ link.isActive ? 'Active' : 'Inactive' }}
+                        </span>
+                    </td>
+                    <td class="text-surface-600 dark:text-surface-400">{{ link.createdAt | date }}</td>
+                    <td>
+                        <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="deleteLink(link.id!)" />
+                    </td>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="emptymessage">
+                <tr>
+                    <td colspan="6" class="text-center py-8 text-surface-500">No links found. Create your first one!
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    </div>
+</div>
+
+<!-- Create Link Dialog -->
+<p-dialog header="Create New Link" [(visible)]="showDialog" [modal]="true" [style]="{ width: '500px' }"
+    [draggable]="false" [resizable]="false">
+    <form [formGroup]="linkForm" (ngSubmit)="saveLink()">
+        <!-- Error Message -->
+        <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage" styleClass="mb-4"></p-message>
+
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-2">
+                <label for="destinationUrl" class="font-medium">Destination URL *</label>
+                <input pInputText id="destinationUrl" formControlName="destinationUrl" placeholder="https://example.com"
+                    class="w-full" [disabled]="saving" />
+                <small class="text-red-500"
+                    *ngIf="linkForm.get('destinationUrl')?.invalid && linkForm.get('destinationUrl')?.touched">
+                    Valid URL required (must start with http:// or https://)
+                </small>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="domain" class="font-medium">Domain *</label>
+                <select id="domain" formControlName="domain" class="w-full p-2 border border-surface-300 rounded"
+                    [disabled]="saving">
+                    <option value="">Select domain</option>
+                    <option *ngFor="let domain of domains" [value]="domain.host">
+                        {{ domain.host }}
+                    </option>
+                </select>
+                <small class="text-red-500" *ngIf="linkForm.get('domain')?.invalid && linkForm.get('domain')?.touched">
+                    Domain is required
+                </small>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="slug" class="font-medium">Custom Slug (optional)</label>
+                <input pInputText id="slug" formControlName="slug" placeholder="my-link" class="w-full"
+                    [disabled]="saving" />
+                <small class="text-surface-500">Leave empty to auto-generate</small>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="title" class="font-medium">Title (optional)</label>
+                <input pInputText id="title" formControlName="title" placeholder="Link title" class="w-full"
+                    [disabled]="saving" />
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="notes" class="font-medium">Notes (optional)</label>
+                <input pInputText id="notes" formControlName="notes" placeholder="Additional notes..." class="w-full"
+                    [disabled]="saving" />
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-4">
+            <p-button label="Cancel" severity="secondary" (onClick)="closeDialog()" [text]="true" [disabled]="saving" />
+            <p-button label="Create" type="submit" [loading]="saving" [disabled]="linkForm.invalid || saving" />
+        </div>
+    </form>
+</p-dialog>

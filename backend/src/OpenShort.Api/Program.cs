@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
+using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,14 +17,28 @@ builder.Services.AddScoped<ISlugGenerator, SlugGenerator>();
 builder.Services.AddScoped<IDomainService, DomainService>();
 builder.Services.AddScoped<ILinkService, LinkService>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ITokenService, TokenService>(); // Register Token Service
 
-
+// --- JWT AUTHENTICATION SETUP ---
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultScheme = IdentityConstants.ApplicationScheme;
-    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+    options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
 })
-.AddCookie(IdentityConstants.ApplicationScheme)
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? "SuperSecretKeyForDevelopmentOnly_ChangeInProduction_AtLeast32CharsLong")),
+        ValidateIssuer = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidateAudience = true,
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        ClockSkew = TimeSpan.Zero
+    };
+})
 .AddScheme<OpenShort.Api.Auth.ApiKeyAuthOptions, OpenShort.Api.Auth.ApiKeyAuthHandler>(
     OpenShort.Api.Auth.ApiKeyAuthOptions.DefaultScheme, 
     options => options.ApiKey = builder.Configuration["Authentication:ApiKey"] ?? "SecretDevKey"
@@ -32,22 +47,26 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization(options =>
 {
     // Ensure that the default policy enforces authentication
-    // but allows EITHER Identity Cookie OR ApiKey
-    /* 
-       Note: The default behavior of [Authorize] without schemes specified uses the DefaultPolicy.
-       We want to ensure that if a user comes with an API Key, they are authenticated.
-       By adding the scheme above, we can use [Authorize(AuthenticationSchemes = "Identity.Application,ApiKey")] 
-       or simpler, make the default policy accept both.
-    */
+    // but allows EITHER Identity JWT OR ApiKey
     var defaultAuthorizationPolicyBuilder = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder(
-        IdentityConstants.ApplicationScheme, 
+        Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, 
         OpenShort.Api.Auth.ApiKeyAuthOptions.DefaultScheme);
     
     defaultAuthorizationPolicyBuilder = defaultAuthorizationPolicyBuilder.RequireAuthenticatedUser();
     options.DefaultPolicy = defaultAuthorizationPolicyBuilder.Build();
 });
 
+// Configure usage of forwarded headers (Nginx proxy)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.All;
+    // Clearing known networks/proxies lets it accept headers from any proxy (safe within Docker network)
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 builder.Services.AddIdentityCore<Microsoft.AspNetCore.Identity.IdentityUser>()
+    .AddRoles<Microsoft.AspNetCore.Identity.IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
     .AddApiEndpoints();
 
@@ -88,6 +107,10 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+
+// Critical: Process Forwarded Headers (X-Forwarded-For, X-Forwarded-Proto) from Nginx
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -103,7 +126,7 @@ app.UseAuthorization();
 
 // app.UseIdentityApi cannot be used directly with AddIdentityCore easily without mapping endpoints manually or using AddIdentityApiEndpoints
 // Let's use MapIdentityApi<IdentityUser>();
-app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
+// app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
 
 app.MapControllers();
 
@@ -111,28 +134,52 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    try
+
+    var context = services.GetRequiredService<AppDbContext>();
+    var userManager = services.GetRequiredService<UserManager<Microsoft.AspNetCore.Identity.IdentityUser>>();
+    
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    
+    // Retry logic for Docker - MySQL might not be ready immediately
+    int maxRetries = 15;
+    int retryDelayMs = 2000;
+    bool initializationSuccessful = false;
+    
+    for (int i = 0; i < maxRetries; i++)
     {
-        var context = services.GetRequiredService<AppDbContext>();
-        var userManager = services.GetRequiredService<UserManager<Microsoft.AspNetCore.Identity.IdentityUser>>();
-        
-        // We use EnsureCreated for simplicity in MVP if migrations fail, but Migrate is better.
-        // Given we have migrations:
-        // context.Database.Migrate(); 
-        // But since we might run without DB locally first, let's wrap it safe or just try.
-        // actually for Docker compose we want Migrate().
-        
-        // checking if we can connect
-        if (context.Database.CanConnect()) {
-             context.Database.Migrate();
-             await DbSeeder.SeedAsync(context, userManager);
+        try
+        {
+            logger.LogInformation("Attempting to connect to database (attempt {Attempt}/{MaxRetries})...", i + 1, maxRetries);
+            
+            if (context.Database.CanConnect())
+            {
+                logger.LogInformation("Database connection successful. Applying migrations...");
+                context.Database.Migrate();
+                logger.LogInformation("Migrations applied successfully. Seeding data...");
+                await DbSeeder.SeedAsync(context, userManager);
+                logger.LogInformation("Database initialization completed successfully.");
+                initializationSuccessful = true;
+                break;
+            }
+            else 
+            {
+                    logger.LogWarning("Database.CanConnect() returned false. Retrying...");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Database initialization attempt {Attempt} failed. Retrying in {Delay}ms...", i + 1, retryDelayMs);
+        }
+
+        if (i < maxRetries - 1)
+        {
+            await Task.Delay(retryDelayMs);
         }
     }
-    catch (Exception ex)
+
+    if (!initializationSuccessful)
     {
-        // Log error
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred during migration/seeding.");
+        throw new Exception($"Failed to connect to database and apply migrations after {maxRetries} attempts.");
     }
 }
 

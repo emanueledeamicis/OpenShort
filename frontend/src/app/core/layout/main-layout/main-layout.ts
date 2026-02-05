@@ -57,15 +57,7 @@ export class MainLayoutComponent {
   ) { }
 
   logout() {
-    this.authService.logout().subscribe({
-      next: () => {
-        this.router.navigate(['/login']);
-      },
-      error: (err) => {
-        console.error('Logout error:', err);
-        // Force navigation even if logout fails
-        this.router.navigate(['/login']);
-      }
-    });
+    this.authService.logout();
+    this.router.navigate(['/login']);
   }
 }

@@ -6,7 +6,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
     volumes:
-      - mysql-data:/var/lib/mysql
+      - openshort-mysql-data:/var/lib/mysql
     networks:
       - openshort-network
     healthcheck:
@@ -24,6 +24,7 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: "Server=mysql;Database=${MYSQL_DATABASE};User=root;Password=${MYSQL_ROOT_PASSWORD};"
+      Jwt__Key: ${JWT_SECRET_KEY}
     ports:
       - "6000:8080"
     depends_on:
@@ -49,4 +50,4 @@ networks:
     driver: bridge
 
 volumes:
-  mysql-data:
+  openshort-mysql-data:

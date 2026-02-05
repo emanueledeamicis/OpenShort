@@ -31,6 +31,11 @@ import { AuthService } from '../../services/auth.service';
                 <i class="pi pi-globe"></i>
                 <span class="font-medium">Domains</span>
             </a>
+             <a routerLink="/security" routerLinkActive="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400" 
+               class="p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
+                <i class="pi pi-lock"></i>
+                <span class="font-medium">Security</span>
+            </a>
         </nav>
 
         <div class="mt-auto pt-4 border-t border-surface-200 dark:border-surface-700">

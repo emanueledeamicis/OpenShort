@@ -1,0 +1,101 @@
+<div class="security-container">
+    <h1>🔐 Sicurezza</h1>
+
+    <!-- API KEY SECTION -->
+    <section class="security-section">
+        <h2>API Key</h2>
+        <p class="section-description">
+            L'API Key ti permette di autenticare le chiamate API programmatiche.
+            Genera una chiave e usala nell'header <code>X-Api-Key</code>.
+        </p>
+
+        <div class="api-key-status" *ngIf="!isLoadingApiKey">
+            <div *ngIf="!apiKeyInfo?.exists" class="no-key-message">
+                <span class="status-icon">⚠️</span>
+                <span>Nessuna API Key configurata.</span>
+            </div>
+
+            <div *ngIf="apiKeyInfo?.exists && !generatedKey" class="key-info">
+                <div class="key-detail">
+                    <span class="label">Prefisso:</span>
+                    <code>{{ apiKeyInfo?.prefix }}</code>
+                </div>
+                <div class="key-detail">
+                    <span class="label">Creata il:</span>
+                    <span>{{ apiKeyInfo?.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+            </div>
+
+            <!-- Generated Key Display -->
+            <div *ngIf="generatedKey" class="generated-key-box">
+                <div class="warning-banner">
+                    ⚠️ <strong>Salva questa chiave ora!</strong> Non sarà più visibile.
+                </div>
+                <div class="key-display">
+                    <code>{{ generatedKey }}</code>
+                    <button class="btn-copy" (click)="copyKey()">
+                        {{ keyCopied ? '✓ Copiata!' : '📋 Copia' }}
+                    </button>
+                </div>
+                <button class="btn-secondary" (click)="dismissGeneratedKey()">
+                    Ho salvato la chiave
+                </button>
+            </div>
+
+            <!-- Confirm Regenerate -->
+            <div *ngIf="showConfirmRegenerate" class="confirm-box">
+                <p>⚠️ Rigenerare la chiave invaliderà quella esistente. Continuare?</p>
+                <div class="confirm-actions">
+                    <button class="btn-danger" (click)="generateApiKey()" [disabled]="isGeneratingApiKey">
+                        Sì, rigenera
+                    </button>
+                    <button class="btn-secondary" (click)="cancelRegenerate()">Annulla</button>
+                </div>
+            </div>
+
+            <!-- Generate Button -->
+            <div *ngIf="!generatedKey && !showConfirmRegenerate" class="actions">
+                <button class="btn-primary" (click)="generateApiKey()" [disabled]="isGeneratingApiKey">
+                    {{ apiKeyInfo?.exists ? '🔄 Rigenera API Key' : '🔑 Genera API Key' }}
+                </button>
+            </div>
+        </div>
+
+        <div *ngIf="isLoadingApiKey" class="loading">Caricamento...</div>
+    </section>
+
+    <!-- PASSWORD SECTION -->
+    <section class="security-section">
+        <h2>Cambio Password</h2>
+        <p class="section-description">
+            Modifica la password del tuo account.
+        </p>
+
+        <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="password-form">
+            <div class="form-group">
+                <label for="currentPassword">Password attuale</label>
+                <input type="password" id="currentPassword" formControlName="currentPassword"
+                    placeholder="Inserisci la password attuale">
+            </div>
+
+            <div class="form-group">
+                <label for="newPassword">Nuova password</label>
+                <input type="password" id="newPassword" formControlName="newPassword"
+                    placeholder="Inserisci la nuova password">
+            </div>
+
+            <div class="form-group">
+                <label for="confirmPassword">Conferma nuova password</label>
+                <input type="password" id="confirmPassword" formControlName="confirmPassword"
+                    placeholder="Ripeti la nuova password">
+            </div>
+
+            <div *ngIf="passwordMessage" class="success-message">✓ {{ passwordMessage }}</div>
+            <div *ngIf="passwordError" class="error-message">✗ {{ passwordError }}</div>
+
+            <button type="submit" class="btn-primary" [disabled]="passwordForm.invalid || isChangingPassword">
+                {{ isChangingPassword ? 'Salvataggio...' : 'Cambia Password' }}
+            </button>
+        </form>
+    </section>
+</div>

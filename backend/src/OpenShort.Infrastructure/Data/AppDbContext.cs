@@ -13,6 +13,7 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
 
     public DbSet<Link> Links { get; set; }
     public DbSet<Domain> Domains { get; set; }
+    public DbSet<ApiKey> ApiKeys { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

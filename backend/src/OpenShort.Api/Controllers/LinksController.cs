@@ -9,7 +9,7 @@ namespace OpenShort.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[Authorize] // Require Authentication (Cookie or ApiKey)
+[Authorize] // Require Authentication (JWT or ApiKey)
 public class LinksController : ControllerBase
 {
     private readonly ILinkService _linkService;

@@ -18,6 +18,7 @@ builder.Services.AddScoped<IDomainService, DomainService>();
 builder.Services.AddScoped<ILinkService, LinkService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>(); // Register Token Service
+builder.Services.AddScoped<IApiKeyService, ApiKeyService>(); // Register ApiKey Service
 
 // --- JWT AUTHENTICATION SETUP ---
 builder.Services.AddAuthentication(options =>
@@ -41,7 +42,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddScheme<OpenShort.Api.Auth.ApiKeyAuthOptions, OpenShort.Api.Auth.ApiKeyAuthHandler>(
     OpenShort.Api.Auth.ApiKeyAuthOptions.DefaultScheme, 
-    options => options.ApiKey = builder.Configuration["Authentication:ApiKey"] ?? "SecretDevKey"
+    options => { } // No static config needed, uses IApiKeyService
 );
 
 builder.Services.AddAuthorization(options =>

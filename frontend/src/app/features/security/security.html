@@ -1,27 +1,27 @@
 <div class="security-container">
-    <h1>🔐 Sicurezza</h1>
+    <h1>🔐 Security</h1>
 
     <!-- API KEY SECTION -->
     <section class="security-section">
         <h2>API Key</h2>
         <p class="section-description">
-            L'API Key ti permette di autenticare le chiamate API programmatiche.
-            Genera una chiave e usala nell'header <code>X-Api-Key</code>.
+            The API Key allows you to authenticate programmatic API calls.
+            Generate a key and use it in the <code>X-Api-Key</code> header.
         </p>
 
         <div class="api-key-status" *ngIf="!isLoadingApiKey">
             <div *ngIf="!apiKeyInfo?.exists" class="no-key-message">
                 <span class="status-icon">⚠️</span>
-                <span>Nessuna API Key configurata.</span>
+                <span>No API Key configured.</span>
             </div>
 
             <div *ngIf="apiKeyInfo?.exists && !generatedKey" class="key-info">
                 <div class="key-detail">
-                    <span class="label">Prefisso:</span>
+                    <span class="label">Prefix:</span>
                     <code>{{ apiKeyInfo?.prefix }}</code>
                 </div>
                 <div class="key-detail">
-                    <span class="label">Creata il:</span>
+                    <span class="label">Created on:</span>
                     <span>{{ apiKeyInfo?.createdAt | date:'dd/MM/yyyy HH:mm' }}</span>
                 </div>
             </div>
@@ -29,72 +29,71 @@
             <!-- Generated Key Display -->
             <div *ngIf="generatedKey" class="generated-key-box">
                 <div class="warning-banner">
-                    ⚠️ <strong>Salva questa chiave ora!</strong> Non sarà più visibile.
+                    ⚠️ <strong>Save this key now!</strong> It will not be visible again.
                 </div>
                 <div class="key-display">
                     <code>{{ generatedKey }}</code>
                     <button class="btn-copy" (click)="copyKey()">
-                        {{ keyCopied ? '✓ Copiata!' : '📋 Copia' }}
+                        {{ keyCopied ? '✓ Copied!' : '📋 Copy' }}
                     </button>
                 </div>
                 <button class="btn-secondary" (click)="dismissGeneratedKey()">
-                    Ho salvato la chiave
+                    I have saved the key
                 </button>
             </div>
 
             <!-- Confirm Regenerate -->
             <div *ngIf="showConfirmRegenerate" class="confirm-box">
-                <p>⚠️ Rigenerare la chiave invaliderà quella esistente. Continuare?</p>
+                <p>⚠️ Regenerating the key will invalidate the existing one. Continue?</p>
                 <div class="confirm-actions">
                     <button class="btn-danger" (click)="generateApiKey()" [disabled]="isGeneratingApiKey">
-                        Sì, rigenera
+                        Yes, regenerate
                     </button>
-                    <button class="btn-secondary" (click)="cancelRegenerate()">Annulla</button>
+                    <button class="btn-secondary" (click)="cancelRegenerate()">Cancel</button>
                 </div>
             </div>
 
             <!-- Generate Button -->
             <div *ngIf="!generatedKey && !showConfirmRegenerate" class="actions">
                 <button class="btn-primary" (click)="generateApiKey()" [disabled]="isGeneratingApiKey">
-                    {{ apiKeyInfo?.exists ? '🔄 Rigenera API Key' : '🔑 Genera API Key' }}
+                    {{ apiKeyInfo?.exists ? '🔄 Regenerate API Key' : '🔑 Generate API Key' }}
                 </button>
             </div>
         </div>
 
-        <div *ngIf="isLoadingApiKey" class="loading">Caricamento...</div>
+        <div *ngIf="isLoadingApiKey" class="loading">Loading...</div>
     </section>
 
     <!-- PASSWORD SECTION -->
     <section class="security-section">
-        <h2>Cambio Password</h2>
+        <h2>Change Password</h2>
         <p class="section-description">
-            Modifica la password del tuo account.
+            Update your account password.
         </p>
 
         <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="password-form">
             <div class="form-group">
-                <label for="currentPassword">Password attuale</label>
+                <label for="currentPassword">Current password</label>
                 <input type="password" id="currentPassword" formControlName="currentPassword"
-                    placeholder="Inserisci la password attuale">
+                    placeholder="Enter current password">
             </div>
 
             <div class="form-group">
-                <label for="newPassword">Nuova password</label>
-                <input type="password" id="newPassword" formControlName="newPassword"
-                    placeholder="Inserisci la nuova password">
+                <label for="newPassword">New password</label>
+                <input type="password" id="newPassword" formControlName="newPassword" placeholder="Enter new password">
             </div>
 
             <div class="form-group">
-                <label for="confirmPassword">Conferma nuova password</label>
+                <label for="confirmPassword">Confirm new password</label>
                 <input type="password" id="confirmPassword" formControlName="confirmPassword"
-                    placeholder="Ripeti la nuova password">
+                    placeholder="Repeat new password">
             </div>
 
             <div *ngIf="passwordMessage" class="success-message">✓ {{ passwordMessage }}</div>
             <div *ngIf="passwordError" class="error-message">✗ {{ passwordError }}</div>
 
             <button type="submit" class="btn-primary" [disabled]="passwordForm.invalid || isChangingPassword">
-                {{ isChangingPassword ? 'Salvataggio...' : 'Cambia Password' }}
+                {{ isChangingPassword ? 'Saving...' : 'Change Password' }}
             </button>
         </form>
     </section>

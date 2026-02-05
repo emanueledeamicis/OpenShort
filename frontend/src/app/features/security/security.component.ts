@@ -113,7 +113,7 @@ export class SecurityComponent implements OnInit {
 
         const formValue = this.passwordForm.value;
         if (formValue.newPassword !== formValue.confirmPassword) {
-            this.passwordError = 'Le password non coincidono.';
+            this.passwordError = 'Passwords do not match.';
             return;
         }
 
@@ -127,13 +127,15 @@ export class SecurityComponent implements OnInit {
             confirmPassword: formValue.confirmPassword
         }).subscribe({
             next: (result) => {
-                this.passwordMessage = 'Password cambiata con successo!';
+                this.passwordMessage = 'Password changed successfully!';
                 this.passwordForm.reset();
                 this.isChangingPassword = false;
+                this.cdr.detectChanges(); // Force UI update
             },
             error: (err) => {
-                this.passwordError = err.error?.message || 'Errore durante il cambio password.';
+                this.passwordError = err.error?.message || 'Error occurred while changing password.';
                 this.isChangingPassword = false;
+                this.cdr.detectChanges(); // Force UI update
             }
         });
     }

@@ -1,14 +1,16 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormGroup, FormBuilder, Validators } from '@angular/forms';
+import { ButtonModule } from 'primeng/button';
+import { InputTextModule } from 'primeng/inputtext';
+import { MessageModule } from 'primeng/message';
 import { SecurityService, ApiKeyInfo } from '../../core/services/security.service';
 
 @Component({
     selector: 'app-security',
     standalone: true,
-    imports: [CommonModule, FormsModule, ReactiveFormsModule],
-    templateUrl: './security.html',
-    styleUrl: './security.css'
+    imports: [CommonModule, FormsModule, ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule],
+    templateUrl: './security.html'
 })
 export class SecurityComponent implements OnInit {
     // API Key
@@ -62,12 +64,15 @@ export class SecurityComponent implements OnInit {
         });
     }
 
-    generateApiKey() {
-        if (this.apiKeyInfo?.exists && !this.showConfirmRegenerate) {
+    promptGenerateApiKey() {
+        if (this.apiKeyInfo?.exists) {
             this.showConfirmRegenerate = true;
-            return;
+        } else {
+            this.generateApiKey();
         }
+    }
 
+    generateApiKey() {
         this.showConfirmRegenerate = false;
         this.isGeneratingApiKey = true;
         this.generatedKey = null;

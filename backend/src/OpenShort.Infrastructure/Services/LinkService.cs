@@ -33,31 +33,55 @@ public class LinkService : ILinkService
 
     public async Task<Link?> CreateAsync(Link link)
     {
-        // Slug Logic
+        const int maxRetries = 5;
+        
+        // If custom slug provided, validate it's unique
         if (!string.IsNullOrEmpty(link.Slug))
         {
             if (await _context.Links.AnyAsync(l => l.Slug == link.Slug && l.Domain == link.Domain))
             {
-                return null; // Slug Conflict
+                return null; // Slug Conflict - don't retry for custom slugs
             }
         }
         else
         {
-            // Auto-generate
+            // Auto-generate slug
             link.Slug = _slugGenerator.GenerateSlug();
-            while (await _context.Links.AnyAsync(l => l.Slug == link.Slug && l.Domain == link.Domain))
+        }
+
+        link.CreatedAt = DateTime.UtcNow;
+        link.IsActive = true;
+
+        // Retry loop for auto-generated slug collisions
+        for (int attempt = 0; attempt < maxRetries; attempt++)
+        {
+            try
             {
+                _context.Links.Add(link);
+                await _context.SaveChangesAsync();
+                return link;
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                // Detach the entity to allow re-adding with new slug
+                _context.Entry(link).State = EntityState.Detached;
+                
+                // Generate new slug and retry
                 link.Slug = _slugGenerator.GenerateSlug();
             }
         }
 
-        link.CreatedAt = DateTime.UtcNow;
-        link.IsActive = true; // Default
-
-        _context.Links.Add(link);
-        await _context.SaveChangesAsync();
-        return link;
+        // Max retries exceeded
+        throw new InvalidOperationException($"Failed to create link after {maxRetries} attempts due to slug collisions.");
     }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        // MySQL unique constraint violation code
+        return ex.InnerException?.Message.Contains("Duplicate entry") == true ||
+               ex.InnerException?.Message.Contains("UNIQUE constraint") == true;
+    }
+
 
     public async Task<bool> UpdateAsync(Link link)
     {

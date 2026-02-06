@@ -10,3 +10,4 @@ dist/
 *.suo
 *.user
 notes.md
+.agent

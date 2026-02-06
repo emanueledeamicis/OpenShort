@@ -19,10 +19,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: migrations
     container_name: openshort-migrations
     environment:
       ConnectionStrings__DefaultConnection: "Server=mysql;Database=${MYSQL_DATABASE};User=root;Password=${MYSQL_ROOT_PASSWORD};"
-    command: [ "/app/run-migrations.sh" ]
     depends_on:
       mysql:
         condition: service_healthy

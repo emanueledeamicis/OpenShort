@@ -1,15 +1,14 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
 using OpenShort.Api.Controllers;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Data;
-
 using OpenShort.Infrastructure.Services;
-using OpenShort.Core.Interfaces;
 
 namespace OpenShort.Tests.Api;
 
@@ -18,6 +17,7 @@ public class LinksControllerTests
 {
     private AppDbContext _context;
     private Mock<ISlugGenerator> _mockSlugGenerator;
+    private Mock<ILogger<LinksController>> _mockLogger;
     private LinksController _controller;
     private DomainService _domainService;
     private LinkService _linkService;
@@ -31,6 +31,7 @@ public class LinksControllerTests
 
         _context = new AppDbContext(options);
         _mockSlugGenerator = new Mock<ISlugGenerator>();
+        _mockLogger = new Mock<ILogger<LinksController>>();
         _domainService = new DomainService(_context);
         _linkService = new LinkService(_context, _mockSlugGenerator.Object);
 
@@ -39,7 +40,7 @@ public class LinksControllerTests
         _context.Domains.Add(new Domain { Host = "inactive.com", IsActive = false });
         _context.SaveChanges();
 
-        _controller = new LinksController(_linkService, _domainService);
+        _controller = new LinksController(_linkService, _domainService, _mockLogger.Object);
     }
 
     [TearDown]

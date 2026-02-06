@@ -11,10 +11,12 @@ namespace OpenShort.Api.Controllers;
 public class DomainsController : ControllerBase
 {
     private readonly IDomainService _domainService;
+    private readonly ILogger<DomainsController> _logger;
 
-    public DomainsController(IDomainService domainService)
+    public DomainsController(IDomainService domainService, ILogger<DomainsController> logger)
     {
         _domainService = domainService;
+        _logger = logger;
     }
 
     // GET: api/Domains
@@ -86,12 +88,15 @@ public class DomainsController : ControllerBase
                 return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Domain not found.");
             }
         }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
         {
-            // If service re-threw, it means it exists but conflict? 
-            // Actually service only throws if ExistsAsync returns true.
-            // So default behavior.
-            throw;
+            _logger.LogError(ex, "Concurrency error while updating domain {DomainId}", id);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "A concurrency error occurred.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while updating domain {DomainId}", id);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred.");
         }
 
         return NoContent();

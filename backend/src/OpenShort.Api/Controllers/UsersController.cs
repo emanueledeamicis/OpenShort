@@ -12,10 +12,12 @@ namespace OpenShort.Api.Controllers;
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
+    private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService)
+    public UsersController(IUserService userService, ILogger<UsersController> logger)
     {
         _userService = userService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -38,40 +40,58 @@ public class UsersController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<IdentityUser>> CreateUser(string email, string password)
     {
-        var (user, errors) = await _userService.CreateAsync(email, password);
-
-        if (user != null)
+        try
         {
-             return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, new { user.Id, user.UserName, user.Email });
-        }
+            var (user, errors) = await _userService.CreateAsync(email, password);
 
-        foreach (var error in errors)
-        {
-            ModelState.AddModelError(error.Code, error.Description);
+            if (user != null)
+            {
+                _logger.LogInformation("User created: {Email}", email);
+                return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, new { user.Id, user.UserName, user.Email });
+            }
+
+            foreach (var error in errors)
+            {
+                ModelState.AddModelError(error.Code, error.Description);
+            }
+            return ValidationProblem();
         }
-        return ValidationProblem();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user {Email}", email);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while creating the user.");
+        }
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteUser(string id)
     {
-        var (success, errors) = await _userService.DeleteAsync(id);
-
-        if (success)
+        try
         {
-            return NoContent();
-        }
+            var (success, errors) = await _userService.DeleteAsync(id);
 
-        // Check for Not Found
-        if (errors.Any(e => e.Code == "NotFound"))
-        {
-            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "User not found.");
-        }
+            if (success)
+            {
+                _logger.LogInformation("User deleted: {UserId}", id);
+                return NoContent();
+            }
 
-        foreach (var error in errors)
-        {
-            ModelState.AddModelError(error.Code, error.Description);
+            // Check for Not Found
+            if (errors.Any(e => e.Code == "NotFound"))
+            {
+                return Problem(statusCode: StatusCodes.Status404NotFound, detail: "User not found.");
+            }
+
+            foreach (var error in errors)
+            {
+                ModelState.AddModelError(error.Code, error.Description);
+            }
+            return ValidationProblem();
         }
-        return ValidationProblem();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting user {UserId}", id);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while deleting the user.");
+        }
     }
 }

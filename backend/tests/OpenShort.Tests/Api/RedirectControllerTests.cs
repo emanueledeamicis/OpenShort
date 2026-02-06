@@ -1,6 +1,10 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Moq;
+using NUnit.Framework;
 using OpenShort.Api.Controllers;
 using OpenShort.Core.Entities;
 using OpenShort.Infrastructure.Data;
@@ -11,6 +15,7 @@ namespace OpenShort.Tests.Api;
 public class RedirectControllerTests
 {
     private AppDbContext _context;
+    private Mock<ILogger<RedirectController>> _mockLogger;
     private RedirectController _controller;
 
     [SetUp]
@@ -21,7 +26,8 @@ public class RedirectControllerTests
             .Options;
 
         _context = new AppDbContext(options);
-        _controller = new RedirectController(_context);
+        _mockLogger = new Mock<ILogger<RedirectController>>();
+        _controller = new RedirectController(_context, _mockLogger.Object);
 
         // Mock HttpContext for Host request
         var httpContext = new DefaultHttpContext();

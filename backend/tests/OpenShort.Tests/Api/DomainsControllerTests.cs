@@ -1,11 +1,12 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Moq;
 using NUnit.Framework;
 using OpenShort.Api.Controllers;
 using OpenShort.Core.Entities;
 using OpenShort.Infrastructure.Data;
-
 using OpenShort.Infrastructure.Services;
 
 namespace OpenShort.Tests.Api;
@@ -14,6 +15,7 @@ namespace OpenShort.Tests.Api;
 public class DomainsControllerTests
 {
     private AppDbContext _context;
+    private Mock<ILogger<DomainsController>> _mockLogger;
     private DomainsController _controller;
     private DomainService _domainService;
 
@@ -25,8 +27,9 @@ public class DomainsControllerTests
             .Options;
 
         _context = new AppDbContext(options);
+        _mockLogger = new Mock<ILogger<DomainsController>>();
         _domainService = new DomainService(_context);
-        _controller = new DomainsController(_domainService);
+        _controller = new DomainsController(_domainService, _mockLogger.Object);
     }
 
     [TearDown]

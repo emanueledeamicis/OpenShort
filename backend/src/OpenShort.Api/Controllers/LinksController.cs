@@ -14,11 +14,13 @@ public class LinksController : ControllerBase
 {
     private readonly ILinkService _linkService;
     private readonly IDomainService _domainService;
+    private readonly ILogger<LinksController> _logger;
 
-    public LinksController(ILinkService linkService, IDomainService domainService)
+    public LinksController(ILinkService linkService, IDomainService domainService, ILogger<LinksController> logger)
     {
         _linkService = linkService;
         _domainService = domainService;
+        _logger = logger;
     }
 
     // GET: api/Links
@@ -115,9 +117,15 @@ public class LinksController : ControllerBase
                 return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Link not found.");
             }
         }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
         {
-             throw; 
+            _logger.LogError(ex, "Concurrency error while updating link {LinkId}", id);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "A concurrency error occurred. The record may have been modified or deleted by another user.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while updating link {LinkId}", id);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while updating the link.");
         }
 
         return NoContent();

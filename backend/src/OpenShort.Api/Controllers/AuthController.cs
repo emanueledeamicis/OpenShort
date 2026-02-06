@@ -11,60 +11,83 @@ public class AuthController : ControllerBase
 {
     private readonly UserManager<IdentityUser> _userManager;
     private readonly ITokenService _tokenService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(UserManager<IdentityUser> userManager, ITokenService tokenService)
+    public AuthController(UserManager<IdentityUser> userManager, ITokenService tokenService, ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _tokenService = tokenService;
+        _logger = logger;
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
     {
-        var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user == null)
+        try
         {
-            return Unauthorized("Invalid email or password");
+            var user = await _userManager.FindByEmailAsync(request.Email);
+            if (user == null)
+            {
+                _logger.LogWarning("Login attempt failed: User not found {Email}", request.Email);
+                return Unauthorized("Invalid email or password");
+            }
+
+            var result = await _userManager.CheckPasswordAsync(user, request.Password);
+            if (!result)
+            {
+                 _logger.LogWarning("Login attempt failed: Invalid password {Email}", request.Email);
+                return Unauthorized("Invalid email or password");
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            var token = _tokenService.CreateToken(user, roles);
+
+            _logger.LogInformation("User logged in: {Email}", request.Email);
+            return Ok(new AuthResponse
+            {
+                Token = token,
+                Email = user.Email!
+            });
         }
-
-        var result = await _userManager.CheckPasswordAsync(user, request.Password);
-        if (!result)
+        catch (Exception ex)
         {
-            return Unauthorized("Invalid email or password");
+            _logger.LogError(ex, "Unexpected error during login for {Email}", request.Email);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred during login.");
         }
-
-        var roles = await _userManager.GetRolesAsync(user);
-        var token = _tokenService.CreateToken(user, roles);
-
-        return Ok(new AuthResponse
-        {
-            Token = token,
-            Email = user.Email!
-        });
     }
 
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
     {
-        var user = new IdentityUser { UserName = request.Email, Email = request.Email };
-        var result = await _userManager.CreateAsync(user, request.Password);
-
-        if (!result.Succeeded)
+        try
         {
-            foreach (var error in result.Errors)
+            var user = new IdentityUser { UserName = request.Email, Email = request.Email };
+            var result = await _userManager.CreateAsync(user, request.Password);
+
+            if (!result.Succeeded)
             {
-                ModelState.AddModelError(error.Code, error.Description);
+                foreach (var error in result.Errors)
+                {
+                    ModelState.AddModelError(error.Code, error.Description);
+                }
+                _logger.LogWarning("Registration failed for {Email}: {Errors}", request.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
+                return ValidationProblem();
             }
-            return ValidationProblem();
+
+            var roles = await _userManager.GetRolesAsync(user);
+            var token = _tokenService.CreateToken(user, roles);
+
+            _logger.LogInformation("User registered: {Email}", request.Email);
+            return Ok(new AuthResponse
+            {
+                Token = token,
+                Email = user.Email!
+            });
         }
-
-        var roles = await _userManager.GetRolesAsync(user);
-        var token = _tokenService.CreateToken(user, roles);
-
-        return Ok(new AuthResponse
+        catch (Exception ex)
         {
-            Token = token,
-            Email = user.Email!
-        });
+            _logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred during registration.");
+        }
     }
 }

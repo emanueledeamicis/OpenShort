@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
-using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -66,8 +65,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-builder.Services.AddIdentityCore<Microsoft.AspNetCore.Identity.IdentityUser>()
-    .AddRoles<Microsoft.AspNetCore.Identity.IdentityRole>()
+builder.Services.AddIdentityCore<IdentityUser>()
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
     .AddApiEndpoints();
 
@@ -111,6 +110,9 @@ var app = builder.Build();
 
 // Critical: Process Forwarded Headers (X-Forwarded-For, X-Forwarded-Proto) from Nginx
 app.UseForwardedHeaders();
+
+// Global Exception Handler - returns RFC 7807 for unhandled exceptions
+app.UseExceptionHandler(); 
 
 if (app.Environment.IsDevelopment())
 {

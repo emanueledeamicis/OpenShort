@@ -13,11 +13,13 @@ public class SecurityController : ControllerBase
 {
     private readonly UserManager<IdentityUser> _userManager;
     private readonly IApiKeyService _apiKeyService;
+    private readonly ILogger<SecurityController> _logger;
 
-    public SecurityController(UserManager<IdentityUser> userManager, IApiKeyService apiKeyService)
+    public SecurityController(UserManager<IdentityUser> userManager, IApiKeyService apiKeyService, ILogger<SecurityController> logger)
     {
         _userManager = userManager;
         _apiKeyService = apiKeyService;
+        _logger = logger;
     }
 
     // ==================== API KEY ENDPOINTS ====================
@@ -81,21 +83,31 @@ public class SecurityController : ControllerBase
             return Unauthorized();
         }
 
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user == null)
+        try
         {
-            return NotFound(new { message = "User not found." });
-        }
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found." });
+            }
 
-        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
-        
-        if (!result.Succeeded)
+            var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+            
+            if (!result.Succeeded)
+            {
+                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                _logger.LogWarning("Password change failed for user {UserId}: {Errors}", userId, errors);
+                return BadRequest(new { message = errors });
+            }
+
+            _logger.LogInformation("Password changed successfully for user {UserId}", userId);
+            return Ok(new { message = "Password changed successfully." });
+        }
+        catch (Exception ex)
         {
-            var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-            return BadRequest(new { message = errors });
+            _logger.LogError(ex, "Unexpected error during password change for user {UserId}", userId);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while changing the password.");
         }
-
-        return Ok(new { message = "Password changed successfully." });
     }
 }
 

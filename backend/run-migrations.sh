@@ -8,8 +8,10 @@ echo "Waiting for MySQL to be ready..."
 max_retries=30
 retry_count=0
 
+cd /src/OpenShort.Api
+
 while [ $retry_count -lt $max_retries ]; do
-  if dotnet ef database update --project /src/OpenShort.Infrastructure --no-build 2>&1; then
+  if dotnet ef database update --project ../OpenShort.Infrastructure --configuration Release 2>&1; then
     echo "=== Database migrations completed successfully ==="
     exit 0
   fi

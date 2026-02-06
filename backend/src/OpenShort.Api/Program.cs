@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
+using OpenShort.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,12 +13,16 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.Parse("8.0.30-mysql")));
 
+// Configure SlugSettings
+builder.Services.Configure<SlugSettings>(builder.Configuration.GetSection("SlugSettings"));
+
 builder.Services.AddScoped<ISlugGenerator, SlugGenerator>();
 builder.Services.AddScoped<IDomainService, DomainService>();
 builder.Services.AddScoped<ILinkService, LinkService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>(); // Register Token Service
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>(); // Register ApiKey Service
+
 
 // --- JWT AUTHENTICATION SETUP ---
 builder.Services.AddAuthentication(options =>

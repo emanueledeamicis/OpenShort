@@ -10,6 +10,7 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
 - 📊 Dashboard with statistics
 - 🎨 Modern UI with Angular and PrimeNG
 - 🐳 Docker deployment ready
+- 🔄 Collision-resistant slug generation with automatic retry
 
 ## Tech Stack
 

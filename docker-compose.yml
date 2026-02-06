@@ -15,6 +15,21 @@ services:
       timeout: 5s
       retries: 5
 
+  migrations:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: openshort-migrations
+    environment:
+      ConnectionStrings__DefaultConnection: "Server=mysql;Database=${MYSQL_DATABASE};User=root;Password=${MYSQL_ROOT_PASSWORD};"
+    command: [ "/app/run-migrations.sh" ]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - openshort-network
+    restart: "no"
+
   backend:
     build:
       context: ./backend
@@ -28,8 +43,8 @@ services:
     ports:
       - "6000:8080"
     depends_on:
-      mysql:
-        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
     networks:
       - openshort-network
 

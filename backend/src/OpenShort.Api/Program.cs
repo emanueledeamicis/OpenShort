@@ -133,56 +133,28 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Apply migrations and seed data
+// Seed initial data (migrations are handled by init container)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-
     var context = services.GetRequiredService<AppDbContext>();
     var userManager = services.GetRequiredService<UserManager<Microsoft.AspNetCore.Identity.IdentityUser>>();
-    
     var logger = services.GetRequiredService<ILogger<Program>>();
     
-    // Retry logic for Docker - MySQL might not be ready immediately
-    int maxRetries = 15;
-    int retryDelayMs = 2000;
-    bool initializationSuccessful = false;
-    
-    for (int i = 0; i < maxRetries; i++)
+    try
     {
-        try
+        // Only seed if database is accessible and not already seeded
+        if (context.Database.CanConnect())
         {
-            logger.LogInformation("Attempting to connect to database (attempt {Attempt}/{MaxRetries})...", i + 1, maxRetries);
-            
-            if (context.Database.CanConnect())
-            {
-                logger.LogInformation("Database connection successful. Applying migrations...");
-                context.Database.Migrate();
-                logger.LogInformation("Migrations applied successfully. Seeding data...");
-                await DbSeeder.SeedAsync(context, userManager);
-                logger.LogInformation("Database initialization completed successfully.");
-                initializationSuccessful = true;
-                break;
-            }
-            else 
-            {
-                    logger.LogWarning("Database.CanConnect() returned false. Retrying...");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Database initialization attempt {Attempt} failed. Retrying in {Delay}ms...", i + 1, retryDelayMs);
-        }
-
-        if (i < maxRetries - 1)
-        {
-            await Task.Delay(retryDelayMs);
+            logger.LogInformation("Checking if initial data seeding is required...");
+            await DbSeeder.SeedAsync(context, userManager);
+            logger.LogInformation("Data seeding check completed.");
         }
     }
-
-    if (!initializationSuccessful)
+    catch (Exception ex)
     {
-        throw new Exception($"Failed to connect to database and apply migrations after {maxRetries} attempts.");
+        logger.LogError(ex, "An error occurred during data seeding.");
+        // Don't fail startup for seeding errors in production
     }
 }
 

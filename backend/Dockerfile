@@ -2,6 +2,10 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
+# Install EF Core tools for migrations
+RUN dotnet tool install --global dotnet-ef
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
 # Copy csproj files and restore dependencies
 COPY ["src/OpenShort.Api/OpenShort.Api.csproj", "OpenShort.Api/"]
 COPY ["src/OpenShort.Core/OpenShort.Core.csproj", "OpenShort.Core/"]
@@ -21,5 +25,21 @@ RUN dotnet publish "OpenShort.Api.csproj" -c Release -o /app/publish /p:UseAppHo
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 EXPOSE 8080
+
+# Install dotnet-ef for runtime migrations
+RUN apt-get update && apt-get install -y curl && \
+    curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0 --install-dir /usr/share/dotnet && \
+    ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet && \
+    dotnet tool install --global dotnet-ef --version 9.* && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+ENV PATH="${PATH}:/root/.dotnet/tools"
+
+# Copy published app and source for migrations
 COPY --from=publish /app/publish .
+COPY --from=build /src /src
+
+# Copy migration script
+COPY run-migrations.sh /app/run-migrations.sh
+RUN chmod +x /app/run-migrations.sh
+
 ENTRYPOINT ["dotnet", "OpenShort.Api.dll"]

@@ -73,6 +73,35 @@ To remove volumes (⚠️ deletes all data):
 docker-compose down -v
 ```
 
+## Updating
+
+### Updating from Source
+
+When a new version is available, follow these steps to update your installation:
+
+1. **Pull the latest code**
+   ```bash
+   cd OpenShort
+   git pull
+   ```
+
+2. **Rebuild and restart containers**
+   ```bash
+   docker compose down
+   docker compose build --no-cache
+   docker compose up -d
+   ```
+
+3. **Verify the update**
+   ```bash
+   docker compose logs -f
+   ```
+
+> **Note:** Your `.env` file and database data are preserved during updates. Make sure to keep a backup of your `.env` file in a secure location outside the repository.
+
+> **Future:** When pre-built images are published to a container registry, the update process will be simplified to `docker compose pull && docker compose up -d`.
+
+
 ## Development
 
 ### Backend (.NET)

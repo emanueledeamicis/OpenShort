@@ -50,7 +50,7 @@ public class LinkService : ILinkService
         }
 
         link.CreatedAt = DateTime.UtcNow;
-        link.IsActive = true;
+        // IsActive is set by the controller from the DTO
 
         // Retry loop for auto-generated slug collisions
         for (int attempt = 0; attempt < maxRetries; attempt++)

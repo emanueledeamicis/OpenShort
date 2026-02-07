@@ -64,42 +64,18 @@ public class DomainsController : ControllerBase
         return CreatedAtAction("GetDomain", new { id = createdDomain.Id }, createdDomain);
     }
 
-    // PUT: api/Domains/5
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateDomain(long id, Domain domain)
+    // GET: api/Domains/5/link-count
+    [HttpGet("{id}/link-count")]
+    public async Task<ActionResult<int>> GetLinkCount(long id)
     {
-        if (id != domain.Id)
+        var domain = await _domainService.GetByIdAsync(id);
+        if (domain == null)
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "ID mismatch.");
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Domain not found.");
         }
 
-        // Service.UpdateAsync handles concurrency and returns false if not found? 
-        // We defined it to return bool.
-        // It throws DbUpdateConcurrencyException if concurrency, we can let it bubble or handle global?
-        // Contoller had explicit catch. Service replicates it?
-        // My Service implementation re-throws if exists but concurrent.
-        // If not exists, returns false.
-        
-        try
-        {
-            var success = await _domainService.UpdateAsync(domain);
-            if (!success)
-            {
-                return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Domain not found.");
-            }
-        }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
-        {
-            _logger.LogError(ex, "Concurrency error while updating domain {DomainId}", id);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "A concurrency error occurred.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error while updating domain {DomainId}", id);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred.");
-        }
-
-        return NoContent();
+        var count = await _domainService.GetLinkCountByDomainIdAsync(id);
+        return Ok(count);
     }
 
     // DELETE: api/Domains/5

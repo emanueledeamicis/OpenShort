@@ -30,7 +30,16 @@
                     </td>
                     <td class="text-surface-600 dark:text-surface-400">{{ link.createdAt | date }}</td>
                     <td>
-                        <p-button icon="pi pi-trash" severity="danger" [text]="true" (onClick)="deleteLink(link.id!)" />
+                        <div class="flex gap-1">
+                            <p-button [icon]="link.isActive ? 'pi pi-pause' : 'pi pi-play'"
+                                [severity]="link.isActive ? 'warn' : 'success'" [rounded]="true" [outlined]="true"
+                                size="small" [pTooltip]="link.isActive ? 'Deactivate' : 'Activate'"
+                                (onClick)="openToggleConfirm(link)" />
+                            <p-button icon="pi pi-pencil" severity="info" [rounded]="true" [outlined]="true"
+                                size="small" pTooltip="Edit" (onClick)="openEditDialog(link)" />
+                            <p-button icon="pi pi-trash" severity="danger" [rounded]="true" [outlined]="true"
+                                size="small" pTooltip="Delete" (onClick)="openDeleteConfirm(link)" />
+                        </div>
                     </td>
                 </tr>
             </ng-template>
@@ -66,7 +75,6 @@
                 <label for="domain" class="font-medium">Domain *</label>
                 <select id="domain" formControlName="domain" class="w-full p-2 border border-surface-300 rounded"
                     [disabled]="saving">
-                    <option value="">Select domain</option>
                     <option *ngFor="let domain of domains" [value]="domain.host">
                         {{ domain.host }}
                     </option>
@@ -94,6 +102,11 @@
                 <input pInputText id="notes" formControlName="notes" placeholder="Additional notes..." class="w-full"
                     [disabled]="saving" />
             </div>
+
+            <div class="flex items-center gap-2">
+                <p-checkbox formControlName="isActive" [binary]="true" inputId="isActiveCreate" />
+                <label for="isActiveCreate" class="font-medium cursor-pointer">Active</label>
+            </div>
         </div>
 
         <div class="flex justify-end gap-2 mt-4">
@@ -101,4 +114,106 @@
             <p-button label="Create" type="submit" [loading]="saving" [disabled]="linkForm.invalid || saving" />
         </div>
     </form>
+</p-dialog>
+
+<!-- Edit Link Dialog -->
+<p-dialog header="Edit Link" [(visible)]="showEditDialog" [modal]="true" [style]="{ width: '500px' }"
+    [draggable]="false" [resizable]="false">
+    <form [formGroup]="editForm" (ngSubmit)="updateLink()">
+        <!-- Error Message -->
+        <p-message *ngIf="editErrorMessage" severity="error" [text]="editErrorMessage" styleClass="mb-4"></p-message>
+
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-2">
+                <label for="editDestinationUrl" class="font-medium">Destination URL *</label>
+                <input pInputText id="editDestinationUrl" formControlName="destinationUrl"
+                    placeholder="https://example.com" class="w-full" [disabled]="saving" />
+                <small class="text-red-500"
+                    *ngIf="editForm.get('destinationUrl')?.invalid && editForm.get('destinationUrl')?.touched">
+                    Valid URL required (must start with http:// or https://)
+                </small>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="editRedirectType" class="font-medium">Redirect Type *</label>
+                <p-select id="editRedirectType" formControlName="redirectType" [options]="redirectTypeOptions"
+                    optionLabel="label" optionValue="value" placeholder="Select redirect type" styleClass="w-full"
+                    [disabled]="saving" />
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="editTitle" class="font-medium">Title (optional)</label>
+                <input pInputText id="editTitle" formControlName="title" placeholder="Link title" class="w-full"
+                    [disabled]="saving" />
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <label for="editNotes" class="font-medium">Notes (optional)</label>
+                <input pInputText id="editNotes" formControlName="notes" placeholder="Additional notes..."
+                    class="w-full" [disabled]="saving" />
+            </div>
+
+            <div class="flex items-center gap-2">
+                <p-checkbox formControlName="isActive" [binary]="true" inputId="isActiveEdit" />
+                <label for="isActiveEdit" class="font-medium cursor-pointer">Active</label>
+            </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-4">
+            <p-button label="Cancel" severity="secondary" (onClick)="closeEditDialog()" [text]="true"
+                [disabled]="saving" />
+            <p-button label="Save" type="submit" [loading]="saving" [disabled]="editForm.invalid || saving" />
+        </div>
+    </form>
+</p-dialog>
+
+<!-- Delete Confirmation Dialog -->
+<p-dialog header="Confirm Delete" [(visible)]="showDeleteConfirm" [modal]="true" [style]="{ width: '400px' }"
+    [draggable]="false" [resizable]="false">
+    <div class="flex flex-col gap-4">
+        <div class="flex items-center gap-3">
+            <i class="pi pi-exclamation-triangle text-4xl text-red-500"></i>
+            <div>
+                <p class="font-bold text-lg">Delete Link</p>
+                <p class="text-surface-600 dark:text-surface-400">
+                    Are you sure you want to delete the link <strong>{{ selectedLink?.slug }}</strong>?
+                </p>
+                <p class="text-red-600 font-medium mt-2">
+                    ⚠️ This action is irreversible!
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+        <p-button label="Cancel" severity="secondary" (onClick)="closeDeleteConfirm()" [text]="true"
+            [disabled]="saving" />
+        <p-button label="Delete" severity="danger" (onClick)="confirmDelete()" [loading]="saving" />
+    </div>
+</p-dialog>
+
+<!-- Toggle Confirmation Dialog -->
+<p-dialog header="Confirm Status Change" [(visible)]="showToggleConfirm" [modal]="true" [style]="{ width: '400px' }"
+    [draggable]="false" [resizable]="false">
+    <div class="flex flex-col gap-4">
+        <div class="flex items-center gap-3">
+            <i
+                [class]="'pi text-4xl ' + (selectedLink?.isActive ? 'pi-pause-circle text-yellow-500' : 'pi-play-circle text-green-500')"></i>
+            <div>
+                <p class="font-bold text-lg">{{ selectedLink?.isActive ? 'Deactivate' : 'Activate' }} Link</p>
+                <p class="text-surface-600 dark:text-surface-400">
+                    Are you sure you want to {{ selectedLink?.isActive ? 'deactivate' : 'activate' }} the link
+                    <strong>{{ selectedLink?.slug }}</strong>?
+                </p>
+                <p *ngIf="selectedLink?.isActive" class="text-yellow-600 font-medium mt-2">
+                    ⚠️ Deactivated links will not redirect visitors.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+        <p-button label="Cancel" severity="secondary" (onClick)="closeToggleConfirm()" [text]="true"
+            [disabled]="saving" />
+        <p-button [label]="selectedLink?.isActive ? 'Deactivate' : 'Activate'"
+            [severity]="selectedLink?.isActive ? 'warn' : 'success'" (onClick)="confirmToggle()" [loading]="saving" />
+    </div>
 </p-dialog>

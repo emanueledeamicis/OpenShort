@@ -6,8 +6,14 @@ export interface Link {
     title?: string;
     notes?: string;
     isActive: boolean;
+    redirectType: RedirectType;
     createdAt?: Date;
     visits?: number;
+}
+
+export enum RedirectType {
+    Permanent = 301,
+    Temporary = 302
 }
 
 export interface CreateLinkDto {
@@ -16,6 +22,15 @@ export interface CreateLinkDto {
     domain: string;
     title?: string;
     notes?: string;
+    isActive?: boolean;
+}
+
+export interface UpdateLinkDto {
+    destinationUrl: string;
+    redirectType: RedirectType;
+    title?: string;
+    notes?: string;
+    isActive: boolean;
 }
 
 export interface Domain {

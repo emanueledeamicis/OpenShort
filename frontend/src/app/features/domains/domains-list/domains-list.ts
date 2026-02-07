@@ -6,6 +6,7 @@ import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
+import { TooltipModule } from 'primeng/tooltip';
 import { Subscription } from 'rxjs';
 import { DomainService } from '../../../core/services/domain.service';
 import { Domain } from '../../../core/models/api.models';
@@ -20,7 +21,8 @@ import { Domain } from '../../../core/models/api.models';
         ButtonModule,
         DialogModule,
         InputTextModule,
-        MessageModule
+        MessageModule,
+        TooltipModule
     ],
     templateUrl: './domains-list.html',
     styleUrl: './domains-list.css'
@@ -29,9 +31,14 @@ export class DomainsListComponent implements OnInit, OnDestroy {
     domains: Domain[] = [];
     loading = false;
     showDialog = false;
+    showDeleteConfirm = false;
+    showFinalConfirm = false;
     saving = false;
+    deleting = false;
     errorMessage = '';
     domainForm: FormGroup;
+    selectedDomain: Domain | null = null;
+    linkCount = 0;
     private subscription = new Subscription();
 
     constructor(
@@ -110,13 +117,59 @@ export class DomainsListComponent implements OnInit, OnDestroy {
         this.subscription.add(sub);
     }
 
-    deleteDomain(id: number) {
-        if (confirm('Are you sure you want to delete this domain?')) {
-            const sub = this.domainService.delete(id).subscribe({
-                next: () => this.loadDomains(),
-                error: (err) => console.error('Error deleting domain:', err)
-            });
-            this.subscription.add(sub);
-        }
+    // Delete - First Confirmation
+    openDeleteConfirm(domain: Domain) {
+        this.selectedDomain = domain;
+        this.linkCount = 0;
+        this.showDeleteConfirm = true;
+
+        // Load link count
+        const sub = this.domainService.getLinkCount(domain.id).subscribe({
+            next: (count) => {
+                this.linkCount = count;
+                this.cdr.detectChanges();
+            },
+            error: (err) => {
+                console.error('Error loading link count:', err);
+            }
+        });
+        this.subscription.add(sub);
+    }
+
+    closeDeleteConfirm() {
+        this.showDeleteConfirm = false;
+        this.selectedDomain = null;
+        this.linkCount = 0;
+    }
+
+    // Delete - Proceed to Final Confirmation
+    proceedToFinalConfirm() {
+        this.showDeleteConfirm = false;
+        this.showFinalConfirm = true;
+    }
+
+    closeFinalConfirm() {
+        this.showFinalConfirm = false;
+        this.selectedDomain = null;
+        this.linkCount = 0;
+    }
+
+    // Delete - Execute
+    confirmDelete() {
+        if (!this.selectedDomain) return;
+
+        this.deleting = true;
+        const sub = this.domainService.delete(this.selectedDomain.id).subscribe({
+            next: () => {
+                this.deleting = false;
+                this.closeFinalConfirm();
+                this.loadDomains();
+            },
+            error: (err) => {
+                this.deleting = false;
+                console.error('Error deleting domain:', err);
+            }
+        });
+        this.subscription.add(sub);
     }
 }

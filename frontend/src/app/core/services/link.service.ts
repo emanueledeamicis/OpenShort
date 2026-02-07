@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Link, CreateLinkDto } from '../models/api.models';
+import { Link, CreateLinkDto, UpdateLinkDto } from '../models/api.models';
 
 @Injectable({
     providedIn: 'root'
@@ -23,8 +23,8 @@ export class LinkService {
         return this.http.post<Link>(this.apiUrl, dto);
     }
 
-    update(id: number, dto: Partial<Link>): Observable<Link> {
-        return this.http.put<Link>(`${this.apiUrl}/${id}`, dto);
+    update(id: number, dto: UpdateLinkDto): Observable<void> {
+        return this.http.put<void>(`${this.apiUrl}/${id}`, dto);
     }
 
     delete(id: number): Observable<void> {

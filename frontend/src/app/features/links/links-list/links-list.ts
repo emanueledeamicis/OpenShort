@@ -6,10 +6,13 @@ import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
+import { CheckboxModule } from 'primeng/checkbox';
+import { SelectModule } from 'primeng/select';
+import { TooltipModule } from 'primeng/tooltip';
 import { Subscription } from 'rxjs';
 import { LinkService } from '../../../core/services/link.service';
 import { DomainService } from '../../../core/services/domain.service';
-import { Link, Domain } from '../../../core/models/api.models';
+import { Link, Domain, RedirectType, UpdateLinkDto } from '../../../core/models/api.models';
 
 @Component({
     selector: 'app-links-list',
@@ -21,7 +24,10 @@ import { Link, Domain } from '../../../core/models/api.models';
         ButtonModule,
         DialogModule,
         InputTextModule,
-        MessageModule
+        MessageModule,
+        CheckboxModule,
+        SelectModule,
+        TooltipModule
     ],
     templateUrl: './links-list.html',
     styleUrl: './links-list.css'
@@ -31,10 +37,21 @@ export class LinksListComponent implements OnInit, OnDestroy {
     domains: Domain[] = [];
     loading = false;
     showDialog = false;
+    showEditDialog = false;
+    showDeleteConfirm = false;
+    showToggleConfirm = false;
     saving = false;
     errorMessage = '';
+    editErrorMessage = '';
+    selectedLink: Link | null = null;
     linkForm: FormGroup;
+    editForm: FormGroup;
     private subscription = new Subscription();
+
+    redirectTypeOptions = [
+        { label: 'Permanent (301)', value: RedirectType.Permanent },
+        { label: 'Temporary (302)', value: RedirectType.Temporary }
+    ];
 
     constructor(
         private linkService: LinkService,
@@ -47,7 +64,16 @@ export class LinksListComponent implements OnInit, OnDestroy {
             slug: [''],
             domain: ['', Validators.required],
             title: [''],
-            notes: ['']
+            notes: [''],
+            isActive: [true]
+        });
+
+        this.editForm = this.fb.group({
+            destinationUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/)]],
+            redirectType: [RedirectType.Permanent, Validators.required],
+            title: [''],
+            notes: [''],
+            isActive: [true]
         });
     }
 
@@ -91,8 +117,9 @@ export class LinksListComponent implements OnInit, OnDestroy {
         this.subscription.add(sub);
     }
 
+    // Create Dialog
     openCreateDialog() {
-        this.linkForm.reset();
+        this.linkForm.reset({ isActive: true });
         this.errorMessage = '';
         this.showDialog = true;
     }
@@ -129,13 +156,116 @@ export class LinksListComponent implements OnInit, OnDestroy {
         this.subscription.add(sub);
     }
 
-    deleteLink(id: number) {
-        if (confirm('Are you sure you want to delete this link?')) {
-            const sub = this.linkService.delete(id).subscribe({
-                next: () => this.loadLinks(),
-                error: (err) => console.error('Error deleting link:', err)
-            });
-            this.subscription.add(sub);
+    // Edit Dialog
+    openEditDialog(link: Link) {
+        this.selectedLink = link;
+        this.editForm.patchValue({
+            destinationUrl: link.destinationUrl,
+            redirectType: link.redirectType,
+            title: link.title || '',
+            notes: link.notes || '',
+            isActive: link.isActive
+        });
+        this.editErrorMessage = '';
+        this.showEditDialog = true;
+    }
+
+    closeEditDialog() {
+        this.showEditDialog = false;
+        this.editErrorMessage = '';
+        this.selectedLink = null;
+    }
+
+    updateLink() {
+        if (this.editForm.invalid || !this.selectedLink) {
+            this.editForm.markAllAsTouched();
+            return;
         }
+
+        this.saving = true;
+        this.editErrorMessage = '';
+        this.cdr.detectChanges();
+
+        const dto: UpdateLinkDto = this.editForm.value;
+        const sub = this.linkService.update(this.selectedLink.id!, dto).subscribe({
+            next: () => {
+                this.saving = false;
+                this.closeEditDialog();
+                this.loadLinks();
+            },
+            error: (err) => {
+                this.saving = false;
+                this.editErrorMessage = err.error?.detail || err.error?.title || 'Failed to update link. Please try again.';
+                this.cdr.detectChanges();
+                console.error('Error updating link:', err);
+            }
+        });
+        this.subscription.add(sub);
+    }
+
+    // Delete Confirmation
+    openDeleteConfirm(link: Link) {
+        this.selectedLink = link;
+        this.showDeleteConfirm = true;
+    }
+
+    closeDeleteConfirm() {
+        this.showDeleteConfirm = false;
+        this.selectedLink = null;
+    }
+
+    confirmDelete() {
+        if (!this.selectedLink) return;
+
+        this.saving = true;
+        const sub = this.linkService.delete(this.selectedLink.id!).subscribe({
+            next: () => {
+                this.saving = false;
+                this.closeDeleteConfirm();
+                this.loadLinks();
+            },
+            error: (err) => {
+                this.saving = false;
+                console.error('Error deleting link:', err);
+            }
+        });
+        this.subscription.add(sub);
+    }
+
+    // Toggle Confirmation
+    openToggleConfirm(link: Link) {
+        this.selectedLink = link;
+        this.showToggleConfirm = true;
+    }
+
+    closeToggleConfirm() {
+        this.showToggleConfirm = false;
+        this.selectedLink = null;
+    }
+
+    confirmToggle() {
+        if (!this.selectedLink) return;
+
+        this.saving = true;
+        const dto: UpdateLinkDto = {
+            destinationUrl: this.selectedLink.destinationUrl,
+            redirectType: this.selectedLink.redirectType,
+            title: this.selectedLink.title,
+            notes: this.selectedLink.notes,
+            isActive: !this.selectedLink.isActive
+        };
+
+        const sub = this.linkService.update(this.selectedLink.id!, dto).subscribe({
+            next: () => {
+                this.saving = false;
+                this.closeToggleConfirm();
+                this.loadLinks();
+            },
+            error: (err) => {
+                this.saving = false;
+                console.error('Error toggling link status:', err);
+            }
+        });
+        this.subscription.add(sub);
     }
 }

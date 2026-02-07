@@ -87,7 +87,7 @@ public class LinksController : ControllerBase
             Domain = targetDomainHost,
             Title = dto.Title,
             Notes = dto.Notes,
-            // CreatedAt/IsActive handled by Service or set here? Service sets them.
+            IsActive = dto.IsActive,
         };
 
         var createdLink = await _linkService.CreateAsync(link);
@@ -102,16 +102,37 @@ public class LinksController : ControllerBase
 
     // PUT: api/Links/5
     [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateLink(long id, Link link)
+    public async Task<IActionResult> UpdateLink(long id, UpdateLinkDto dto)
     {
-        if (id != link.Id)
+        // 1. Fetch existing link
+        var existingLink = await _linkService.GetByIdAsync(id);
+        if (existingLink == null)
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "ID mismatch.");
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Link not found.");
         }
+
+        // 2. URL Validation
+        if (!Uri.TryCreate(dto.DestinationUrl, UriKind.Absolute, out var uriResult))
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "Invalid Destination URL format.");
+        }
+
+        var scheme = uriResult.Scheme.ToLower();
+        if (scheme == "javascript" || scheme == "vbscript" || scheme == "data")
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "URL scheme is not allowed.");
+        }
+
+        // 3. Update fields
+        existingLink.DestinationUrl = dto.DestinationUrl;
+        existingLink.RedirectType = dto.RedirectType;
+        existingLink.Title = dto.Title;
+        existingLink.Notes = dto.Notes;
+        existingLink.IsActive = dto.IsActive;
 
         try
         {
-            var success = await _linkService.UpdateAsync(link);
+            var success = await _linkService.UpdateAsync(existingLink);
             if (!success)
             {
                 return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Link not found.");
@@ -152,4 +173,14 @@ public class CreateLinkDto
     public string? Domain { get; set; }
     public string? Title { get; set; }
     public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
+public class UpdateLinkDto
+{
+    public required string DestinationUrl { get; set; }
+    public RedirectType RedirectType { get; set; } = RedirectType.Permanent;
+    public string? Title { get; set; }
+    public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;
 }

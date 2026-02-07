@@ -11,4 +11,5 @@ public interface IDomainService
     Task<bool> UpdateAsync(Domain domain);
     Task<bool> DeleteAsync(long id);
     Task<bool> ExistsAsync(long id);
+    Task<int> GetLinkCountByDomainIdAsync(long domainId);
 }

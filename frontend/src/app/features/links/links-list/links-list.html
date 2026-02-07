@@ -75,7 +75,6 @@
                 <label for="domain" class="font-medium">Domain *</label>
                 <select id="domain" formControlName="domain" class="w-full p-2 border border-surface-300 rounded"
                     [disabled]="saving">
-                    <option value="">Select domain</option>
                     <option *ngFor="let domain of domains" [value]="domain.host">
                         {{ domain.host }}
                     </option>

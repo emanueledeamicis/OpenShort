@@ -30,4 +30,8 @@ export class DomainService {
     delete(id: number): Observable<void> {
         return this.http.delete<void>(`${this.apiUrl}/${id}`);
     }
+
+    getLinkCount(id: number): Observable<number> {
+        return this.http.get<number>(`${this.apiUrl}/${id}/link-count`);
+    }
 }

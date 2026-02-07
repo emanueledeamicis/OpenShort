@@ -109,7 +109,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
     loadDomains() {
         const sub = this.domainService.getAll().subscribe({
             next: (data) => {
-                this.domains = data;
+                // Sort by ID descending (newest first)
+                this.domains = data.sort((a, b) => b.id - a.id);
                 this.cdr.detectChanges();
             },
             error: (err) => console.error('Error loading domains:', err)
@@ -119,7 +120,9 @@ export class LinksListComponent implements OnInit, OnDestroy {
 
     // Create Dialog
     openCreateDialog() {
-        this.linkForm.reset({ isActive: true });
+        // Reset form and pre-select the last created domain
+        const defaultDomain = this.domains.length > 0 ? this.domains[0].host : '';
+        this.linkForm.reset({ isActive: true, domain: defaultDomain });
         this.errorMessage = '';
         this.showDialog = true;
     }

@@ -102,6 +102,20 @@ public class DomainsController : ControllerBase
         return NoContent();
     }
 
+    // GET: api/Domains/5/link-count
+    [HttpGet("{id}/link-count")]
+    public async Task<ActionResult<int>> GetLinkCount(long id)
+    {
+        var domain = await _domainService.GetByIdAsync(id);
+        if (domain == null)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Domain not found.");
+        }
+
+        var count = await _domainService.GetLinkCountByDomainIdAsync(id);
+        return Ok(count);
+    }
+
     // DELETE: api/Domains/5
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteDomain(long id)

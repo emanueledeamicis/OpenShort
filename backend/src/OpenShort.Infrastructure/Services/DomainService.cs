@@ -67,6 +67,13 @@ public class DomainService : IDomainService
             return false;
         }
 
+        // Delete all associated links first (cascade delete)
+        var associatedLinks = await _context.Links.Where(l => l.Domain == domain.Host).ToListAsync();
+        if (associatedLinks.Count > 0)
+        {
+            _context.Links.RemoveRange(associatedLinks);
+        }
+
         _context.Domains.Remove(domain);
         await _context.SaveChangesAsync();
         return true;
@@ -75,5 +82,15 @@ public class DomainService : IDomainService
     public async Task<bool> ExistsAsync(long id)
     {
         return await _context.Domains.AnyAsync(e => e.Id == id);
+    }
+
+    public async Task<int> GetLinkCountByDomainIdAsync(long domainId)
+    {
+        var domain = await _context.Domains.FindAsync(domainId);
+        if (domain == null)
+        {
+            return 0;
+        }
+        return await _context.Links.CountAsync(l => l.Domain == domain.Host);
     }
 }

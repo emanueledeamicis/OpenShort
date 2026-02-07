@@ -32,8 +32,8 @@
                         </span>
                     </td>
                     <td>
-                        <p-button icon="pi pi-trash" severity="danger" [text]="true"
-                            (onClick)="deleteDomain(domain.id)" />
+                        <p-button icon="pi pi-trash" severity="danger" [rounded]="true" [outlined]="true" size="small"
+                            pTooltip="Delete" (onClick)="openDeleteConfirm(domain)" />
                     </td>
                 </tr>
             </ng-template>
@@ -71,4 +71,66 @@
             <p-button label="Add" type="submit" [loading]="saving" [disabled]="domainForm.invalid || saving" />
         </div>
     </form>
+</p-dialog>
+
+<!-- Delete Confirmation Dialog - Step 1 -->
+<p-dialog header="Delete Domain" [(visible)]="showDeleteConfirm" [modal]="true" [style]="{ width: '450px' }"
+    [draggable]="false" [resizable]="false">
+    <div class="flex flex-col gap-4">
+        <div class="flex items-start gap-3">
+            <i class="pi pi-exclamation-triangle text-4xl text-red-500 mt-1"></i>
+            <div>
+                <p class="font-bold text-lg mb-2">Are you sure you want to delete this domain?</p>
+                <p class="text-surface-600 dark:text-surface-400 mb-2">
+                    Domain: <strong>{{ selectedDomain?.host }}</strong>
+                </p>
+                <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-2">
+                    <p class="text-red-700 dark:text-red-400 font-medium">
+                        ⚠️ This action is IRREVERSIBLE!
+                    </p>
+                </div>
+                <div
+                    class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                    <p class="text-yellow-700 dark:text-yellow-400">
+                        <strong>{{ linkCount }}</strong> link(s) associated with this domain will also be permanently
+                        deleted.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+        <p-button label="Cancel" severity="secondary" (onClick)="closeDeleteConfirm()" [text]="true" />
+        <p-button label="Proceed" severity="danger" (onClick)="proceedToFinalConfirm()" />
+    </div>
+</p-dialog>
+
+<!-- Delete Confirmation Dialog - Step 2 (Final) -->
+<p-dialog header="Final Confirmation" [(visible)]="showFinalConfirm" [modal]="true" [style]="{ width: '450px' }"
+    [draggable]="false" [resizable]="false">
+    <div class="flex flex-col gap-4">
+        <div class="flex items-start gap-3">
+            <i class="pi pi-ban text-4xl text-red-600 mt-1"></i>
+            <div>
+                <p class="font-bold text-xl text-red-600 mb-2">LAST CHANCE!</p>
+                <p class="text-surface-600 dark:text-surface-400 mb-3">
+                    You are about to permanently delete:
+                </p>
+                <ul class="list-disc list-inside text-surface-700 dark:text-surface-300 mb-3">
+                    <li>Domain: <strong>{{ selectedDomain?.host }}</strong></li>
+                    <li><strong>{{ linkCount }}</strong> associated link(s)</li>
+                </ul>
+                <div class="bg-red-100 dark:bg-red-900/30 border-2 border-red-500 rounded-lg p-4">
+                    <p class="text-red-700 dark:text-red-400 font-bold text-center">
+                        ⛔ THERE IS NO GOING BACK! ⛔
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+        <p-button label="Cancel" severity="secondary" (onClick)="closeFinalConfirm()" [text]="true"
+            [disabled]="deleting" />
+        <p-button label="DELETE PERMANENTLY" severity="danger" (onClick)="confirmDelete()" [loading]="deleting" />
+    </div>
 </p-dialog>

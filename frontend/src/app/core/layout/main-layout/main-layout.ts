@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
+import packageJson from '../../../../../package.json';
 
 @Component({
   selector: 'app-main-layout',
@@ -11,8 +12,11 @@ import { AuthService } from '../../services/auth.service';
     <div class="flex min-h-screen bg-surface-50 dark:bg-surface-950">
       <!-- Sidebar -->
       <aside class="w-64 bg-surface-0 dark:bg-surface-900 border-r border-surface-200 dark:border-surface-700 p-4 flex flex-col">
-        <div class="flex items-center gap-2 mb-8 px-2">
-            <span class="text-xl font-bold text-primary-500">OpenShort</span>
+        <div class="flex flex-col gap-1 mb-8 px-2">
+            <div class="flex items-center gap-2">
+                <span class="text-xl font-bold text-primary-500">OpenShort</span>
+            </div>
+            <span class="text-xs text-surface-500 dark:text-surface-400">v{{version}}</span>
         </div>
         
         <nav class="flex-1 flex flex-col gap-2">
@@ -56,6 +60,8 @@ import { AuthService } from '../../services/auth.service';
   `
 })
 export class MainLayoutComponent {
+  version = packageJson.version;
+
   constructor(
     private authService: AuthService,
     private router: Router

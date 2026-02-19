@@ -11,3 +11,4 @@ dist/
 *.user
 notes.md
 .agent
+openshort.db*

@@ -8,10 +8,31 @@ using OpenShort.Core;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+// Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-// Use fixed version to allow migrations without running DB
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.Parse("8.0.30-mysql")));
+var databaseProvider = builder.Configuration["DatabaseProvider"];
+
+// Determine provider based on configuration or connection string format
+bool useMySql = string.Equals(databaseProvider, "MySql", StringComparison.OrdinalIgnoreCase) || 
+                (!string.IsNullOrEmpty(connectionString) && connectionString.Contains("Server=", StringComparison.OrdinalIgnoreCase));
+
+if (useMySql)
+{
+    Console.WriteLine($"Using MySQL Database Provider. Connection String: {connectionString}");
+    builder.Services.AddDbContext<AppDbContext, MySqlDbContext>(options =>
+        options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+}
+else
+{
+    if (string.IsNullOrEmpty(connectionString))
+    {
+        connectionString = "Data Source=openshort.db";
+    }
+    
+    Console.WriteLine($"Using SQLite Database Provider. Connection String: {connectionString}");
+    builder.Services.AddDbContext<AppDbContext, SqliteDbContext>(options =>
+        options.UseSqlite(connectionString));
+}
 
 // Configure SlugSettings
 builder.Services.Configure<SlugSettings>(builder.Configuration.GetSection("SlugSettings"));

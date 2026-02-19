@@ -196,12 +196,34 @@ app.Use(async (context, next) =>
 });
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")),
+    RequestPath = ""
+});
 
 app.UseAuthentication(); // Ensure Authentication Middleware is called
 app.UseAuthorization();
 
-// app.UseIdentityApi cannot be used directly with AddIdentityCore easily without mapping endpoints manually or using AddIdentityApiEndpoints
+// app.UseIdentityApi cannot be used directly with sharing IdentityUser, so we skip for now
+
+// DEBUG ENDPOINT
+app.MapGet("/debug-files", (IWebHostEnvironment env) => 
+{
+    var contentRoot = env.ContentRootPath;
+    var webRoot = Path.Combine(contentRoot, "wwwroot"); // Force check on "wwwroot"
+    var exists = Directory.Exists(webRoot);
+    var files = exists ? Directory.GetFiles(webRoot).Select(Path.GetFileName).ToArray() : Array.Empty<string>();
+    
+    return Results.Ok(new 
+    { 
+        EnvWebRootPath = env.WebRootPath,
+        CalculatedWebRoot = webRoot,
+        DirExists = exists,
+        FileCount = files.Length,
+        Files = files
+    });
+});
 // Let's use MapIdentityApi<IdentityUser>();
 // app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
 

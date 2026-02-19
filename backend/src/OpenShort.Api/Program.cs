@@ -9,7 +9,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Database Configuration
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var databaseProvider = builder.Configuration["DatabaseProvider"];
 
 // Check for individual MYSQL_ environment variables to support container configuration
@@ -168,6 +167,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStatusCodePages();
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.UseAuthentication(); // Ensure Authentication Middleware is called
 app.UseAuthorization();
@@ -208,8 +209,7 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-app.UseDefaultFiles();
-app.UseStaticFiles();
+
 
 app.MapControllers();
 app.MapFallbackToFile("index.html");

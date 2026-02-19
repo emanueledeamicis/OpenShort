@@ -179,6 +179,8 @@ MYSQL_PASSWORD=secure_password
 # Security
 JWT_SECRET_KEY=your_secure_random_key_at_least_32_chars
 ASPNETCORE_ENVIRONMENT=Production
+
+> **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (e.g. `Password$$` becomes `Password$$$$`) to prevent Docker from interpreting them as variables.
 ```
 
 ### JWT Secret Key

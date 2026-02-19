@@ -19,29 +19,7 @@ services:
     volumes:
       - openshort-data:/app/data
     restart: unless-stopped
-    # depends_on:
-    #   mysql:
-    #     condition: service_healthy
-
-    # --- MySQL Service (Uncomment to use MySQL) ---
-    # mysql:
-    #   image: mysql:8.0
-    #   container_name: openshort-mysql
-    #   environment:
-    #     MYSQL_ROOT_PASSWORD: root_password
-    #     MYSQL_DATABASE: openshort
-    #     MYSQL_USER: openshort
-    #     MYSQL_PASSWORD: openshort_password
-    #   volumes:
-    #     - openshort-mysql-data:/var/lib/mysql
-    #   restart: unless-stopped
-    #   healthcheck:
-    #     test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
-    #     timeout: 20s
-    #     retries: 10
 
 volumes:
   openshort-data:
     name: openshort-data
-  # openshort-mysql-data:
-  #   name: openshort-mysql-data

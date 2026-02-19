@@ -199,8 +199,15 @@ app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")),
-    RequestPath = ""
+    RequestPath = "",
+    ServeUnknownFileTypes = true,
+    OnPrepareResponse = ctx =>
+    {
+        Console.WriteLine($"[StaticFiles] Serving file: {ctx.File.Name}");
+    }
 });
+
+app.UseRouting(); // Explicitly add routing
 
 app.UseAuthentication(); // Ensure Authentication Middleware is called
 app.UseAuthorization();
@@ -211,17 +218,28 @@ app.UseAuthorization();
 app.MapGet("/debug-files", (IWebHostEnvironment env) => 
 {
     var contentRoot = env.ContentRootPath;
-    var webRoot = Path.Combine(contentRoot, "wwwroot"); // Force check on "wwwroot"
-    var exists = Directory.Exists(webRoot);
-    var files = exists ? Directory.GetFiles(webRoot).Select(Path.GetFileName).ToArray() : Array.Empty<string>();
+    var webRoot = Path.Combine(contentRoot, "wwwroot");
+    var provider = new PhysicalFileProvider(webRoot);
     
+    var dirContents = provider.GetDirectoryContents("");
+    var fileInfo = provider.GetFileInfo("main-6OPMIDZA.js"); // Test known file
+
     return Results.Ok(new 
     { 
         EnvWebRootPath = env.WebRootPath,
         CalculatedWebRoot = webRoot,
-        DirExists = exists,
-        FileCount = files.Length,
-        Files = files
+        ProviderRoot = provider.Root,
+        DirExists = Directory.Exists(webRoot),
+        ProviderDirExists = dirContents.Exists,
+        ProviderFileCheck = new 
+        {
+            Name = "main-6OPMIDZA.js",
+            Exists = fileInfo.Exists,
+            PhysicalPath = fileInfo.PhysicalPath,
+            Length = fileInfo.Exists ? fileInfo.Length : -1,
+            IsDirectory = fileInfo.IsDirectory
+        },
+        AllFiles = dirContents.Select(f => new { f.Name, f.Exists, f.Length, f.PhysicalPath }).ToArray()
     });
 });
 // Let's use MapIdentityApi<IdentityUser>();

@@ -5,6 +5,7 @@ COPY ../frontend/package*.json ./
 RUN npm ci
 COPY ../frontend/ .
 RUN npm run build -- --configuration production
+RUN ls -R /app/dist
 
 # Stage 2: Build .NET Backend
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build

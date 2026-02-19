@@ -50,8 +50,8 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
    **Option: Use MySQL**
    To use MySQL instead of SQLite:
    1. Open `docker-compose.yml`.
-   2. Uncomment the `MYSQL_...` environment variables in the `openshort` service.
-   3. Uncomment the `mysql` service definition at the bottom.
+   2. Add the `MYSQL_...` environment variables to the `openshort` service (see "Environment Variables" section below).
+   3. Add a MySQL service definition (standard `mysql:8.0` image) or use an external database.
    4. Run `docker compose up -d`.
 
 3. **Access the application**

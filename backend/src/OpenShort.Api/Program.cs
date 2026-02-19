@@ -8,11 +8,9 @@ using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Database Configuration
+// Web Dasbhoard Configuration
 var contentRoot = builder.Environment.ContentRootPath;
 var webRoot = Path.Combine(contentRoot, "wwwroot");
-
 
 // Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");

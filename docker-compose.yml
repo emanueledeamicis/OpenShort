@@ -1,5 +1,6 @@
 services:
   openshort:
+    image: openshort:latest
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -40,4 +41,7 @@ services:
     #     retries: 10
 
 volumes:
-  openshort-data: # openshort-mysql-data:
+  openshort-data:
+    name: openshort-data
+  # openshort-mysql-data:
+  #   name: openshort-mysql-data

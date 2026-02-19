@@ -34,6 +34,6 @@ EXPOSE 8080
 COPY --from=publish /app/publish .
 
 # Copy compiled frontend to wwwroot
-COPY --from=frontend-build /app/dist/openshort/browser ./wwwroot
+COPY --from=frontend-build /app/dist/OpenShort.Frontend/browser ./wwwroot
 
 ENTRYPOINT ["dotnet", "OpenShort.Api.dll"]

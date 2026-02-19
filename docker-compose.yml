@@ -11,7 +11,7 @@ services:
       # ConnectionStrings__DefaultConnection: "Server=your-mysql-server;Database=your-db;User=your-user;Password=your-password;"
       # Jwt__Key: ${JWT_SECRET_KEY}
     ports:
-      - "80:8080"
+      - "8888:8080"
     volumes:
       - openshort-data:/app
     networks:

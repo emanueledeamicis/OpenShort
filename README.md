@@ -56,7 +56,7 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
    - `MYSQL_PASSWORD`
 
 3. **Access the application**
-   - Application URL: http://localhost:8080
+   - Application URL: http://localhost:8888
 
 ### First Login
 
@@ -218,7 +218,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://localhost:8080; # Single container port
+        proxy_pass http://localhost:8888; # Docker container port
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

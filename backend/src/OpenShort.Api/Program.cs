@@ -12,22 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Database Configuration
 var contentRoot = builder.Environment.ContentRootPath;
 var webRoot = Path.Combine(contentRoot, "wwwroot");
-Console.WriteLine($"[DEBUG] ContentRootPath: {contentRoot}");
-Console.WriteLine($"[DEBUG] Calculated WebRootPath: {webRoot}");
 
-// Force WebRootPath to be correct
-builder.Environment.WebRootPath = webRoot;
-
-if (Directory.Exists(webRoot))
-{
-    Console.WriteLine($"[DEBUG] 'wwwroot' directory FOUND at: {webRoot}");
-    var files = Directory.GetFiles(webRoot);
-    Console.WriteLine($"[DEBUG] Files in wwwroot: {string.Join(", ", files.Select(Path.GetFileName))}");
-}
-else
-{
-    Console.WriteLine($"[DEBUG] 'wwwroot' directory NOT FOUND at: {webRoot}");
-}
 
 // Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -189,22 +174,13 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStatusCodePages();
 
-app.Use(async (context, next) =>
-{
-    Console.WriteLine($"[Middleware] Request: {context.Request.Method} {context.Request.Path}");
-    await next();
-});
+
 
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")),
-    RequestPath = "",
-    ServeUnknownFileTypes = true,
-    OnPrepareResponse = ctx =>
-    {
-        Console.WriteLine($"[StaticFiles] Serving file: {ctx.File.Name}");
-    }
+    FileProvider = new PhysicalFileProvider(webRoot),
+    RequestPath = ""
 });
 
 app.UseRouting(); // Explicitly add routing
@@ -213,35 +189,8 @@ app.UseAuthentication(); // Ensure Authentication Middleware is called
 app.UseAuthorization();
 
 // app.UseIdentityApi cannot be used directly with sharing IdentityUser, so we skip for now
-
-// DEBUG ENDPOINT
-app.MapGet("/debug-files", (IWebHostEnvironment env) => 
-{
-    var contentRoot = env.ContentRootPath;
-    var webRoot = Path.Combine(contentRoot, "wwwroot");
-    var provider = new PhysicalFileProvider(webRoot);
-    
-    var dirContents = provider.GetDirectoryContents("");
-    var fileInfo = provider.GetFileInfo("main-6OPMIDZA.js"); // Test known file
-
-    return Results.Ok(new 
-    { 
-        EnvWebRootPath = env.WebRootPath,
-        CalculatedWebRoot = webRoot,
-        ProviderRoot = provider.Root,
-        DirExists = Directory.Exists(webRoot),
-        ProviderDirExists = dirContents.Exists,
-        ProviderFileCheck = new 
-        {
-            Name = "main-6OPMIDZA.js",
-            Exists = fileInfo.Exists,
-            PhysicalPath = fileInfo.PhysicalPath,
-            Length = fileInfo.Exists ? fileInfo.Length : -1,
-            IsDirectory = fileInfo.IsDirectory
-        },
-        AllFiles = dirContents.Select(f => new { f.Name, f.Exists, f.Length, f.PhysicalPath }).ToArray()
-    });
-});
+// Let's use MapIdentityApi<IdentityUser>();
+// app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
 // Let's use MapIdentityApi<IdentityUser>();
 // app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
 

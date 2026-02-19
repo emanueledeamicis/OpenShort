@@ -5,22 +5,39 @@ services:
       dockerfile: backend/Dockerfile
     container_name: openshort
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
-      ASPNETCORE_URLS: http://+:8080
-      # Override these to use MySQL:
-      # ConnectionStrings__DefaultConnection: "Server=your-mysql-server;Database=your-db;User=your-user;Password=your-password;"
-      # Jwt__Key: ${JWT_SECRET_KEY}
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      # --- MySQL Configuration (Uncomment to use MySQL) ---
+      # - MYSQL_HOST=mysql
+      # - MYSQL_PORT=3306
+      # - MYSQL_DATABASE=openshort
+      # - MYSQL_USER=openshort
+      # - MYSQL_PASSWORD=openshort_password
     ports:
       - "8888:8080"
     volumes:
       - openshort-data:/app/data
-    networks:
-      - openshort-network
     restart: unless-stopped
+    # depends_on:
+    #   mysql:
+    #     condition: service_healthy
 
-networks:
-  openshort-network:
-    driver: bridge
+    # --- MySQL Service (Uncomment to use MySQL) ---
+    # mysql:
+    #   image: mysql:8.0
+    #   container_name: openshort-mysql
+    #   environment:
+    #     MYSQL_ROOT_PASSWORD: root_password
+    #     MYSQL_DATABASE: openshort
+    #     MYSQL_USER: openshort
+    #     MYSQL_PASSWORD: openshort_password
+    #   volumes:
+    #     - openshort-mysql-data:/var/lib/mysql
+    #   restart: unless-stopped
+    #   healthcheck:
+    #     test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+    #     timeout: 20s
+    #     retries: 10
 
 volumes:
-  openshort-data:
+  openshort-data: # openshort-mysql-data:

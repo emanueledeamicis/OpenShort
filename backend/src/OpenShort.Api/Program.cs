@@ -37,9 +37,15 @@ if (useMySql)
 }
 else
 {
+    // Ensure data directory exists for SQLite
+    if (!Directory.Exists("data"))
+    {
+        Directory.CreateDirectory("data");
+    }
+
     if (string.IsNullOrEmpty(connectionString))
     {
-        connectionString = "Data Source=openshort.db";
+        connectionString = "Data Source=data/openshort.db";
     }
     
     Console.WriteLine($"Using SQLite Database Provider. Connection String: {connectionString}");
@@ -170,7 +176,7 @@ app.UseAuthorization();
 // Let's use MapIdentityApi<IdentityUser>();
 // app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
 
-app.MapControllers();
+
 
 // Seed initial data and apply migrations
 using (var scope = app.Services.CreateScope())

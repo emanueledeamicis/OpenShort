@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Database Configuration
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var databaseProvider = builder.Configuration["DatabaseProvider"];
 
 // Check for individual MYSQL_ environment variables to support container configuration

@@ -4,14 +4,58 @@ using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 using OpenShort.Core;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Web Dasbhoard Configuration
+var contentRoot = builder.Environment.ContentRootPath;
+var webRoot = Path.Combine(contentRoot, "wwwroot");
+
+// Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-// Use fixed version to allow migrations without running DB
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.Parse("8.0.30-mysql")));
+var databaseProvider = builder.Configuration["DatabaseProvider"];
+
+// Check for individual MYSQL_ environment variables to support container configuration
+var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
+if (!string.IsNullOrEmpty(mysqlHost))
+{
+    var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
+    var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "openshort";
+    var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
+    var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "";
+    
+    connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};User={mysqlUser};Password={mysqlPassword};SslMode=None;";
+    databaseProvider = "MySql"; // Force provider if env vars are present
+}
+
+// Determine provider based on configuration or connection string format
+bool useMySql = string.Equals(databaseProvider, "MySql", StringComparison.OrdinalIgnoreCase) || 
+                (!string.IsNullOrEmpty(connectionString) && connectionString.Contains("Server=", StringComparison.OrdinalIgnoreCase));
+
+if (useMySql)
+{
+    Console.WriteLine($"Using MySQL Database Provider. Connection String: {connectionString}");
+    builder.Services.AddDbContext<AppDbContext, MySqlDbContext>(options =>
+        options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+}
+else
+{
+    // Ensure data directory exists for SQLite
+    if (!Directory.Exists("data"))
+    {
+        Directory.CreateDirectory("data");
+    }
+
+    if (string.IsNullOrEmpty(connectionString))
+    {
+        connectionString = "Data Source=data/openshort.db";
+    }
+    
+    Console.WriteLine($"Using SQLite Database Provider. Connection String: {connectionString}");
+    builder.Services.AddDbContext<AppDbContext, SqliteDbContext>(options =>
+        options.UseSqlite(connectionString));
+}
 
 // Configure SlugSettings
 builder.Services.Configure<SlugSettings>(builder.Configuration.GetSection("SlugSettings"));
@@ -129,16 +173,28 @@ app.UseHttpsRedirection();
 app.UseStatusCodePages();
 
 
+
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(webRoot),
+    RequestPath = ""
+});
+
+app.UseRouting(); // Explicitly add routing
+
 app.UseAuthentication(); // Ensure Authentication Middleware is called
 app.UseAuthorization();
 
-// app.UseIdentityApi cannot be used directly with AddIdentityCore easily without mapping endpoints manually or using AddIdentityApiEndpoints
+// app.UseIdentityApi cannot be used directly with sharing IdentityUser, so we skip for now
+// Let's use MapIdentityApi<IdentityUser>();
+// app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
 // Let's use MapIdentityApi<IdentityUser>();
 // app.MapGroup("/api/auth").MapIdentityApi<Microsoft.AspNetCore.Identity.IdentityUser>();
 
-app.MapControllers();
 
-// Seed initial data (migrations are handled by init container)
+
+// Seed initial data and apply migrations
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -148,6 +204,11 @@ using (var scope = app.Services.CreateScope())
     
     try
     {
+        // Auto-apply migrations
+        logger.LogInformation("Applying database migrations...");
+        await context.Database.MigrateAsync();
+        logger.LogInformation("Database migrations applied successfully.");
+
         // Only seed if database is accessible and not already seeded
         if (context.Database.CanConnect())
         {
@@ -158,9 +219,14 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred during data seeding.");
+        logger.LogError(ex, "An error occurred during database migration or seeding.");
         // Don't fail startup for seeding errors in production
     }
 }
+
+
+
+app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 app.Run();

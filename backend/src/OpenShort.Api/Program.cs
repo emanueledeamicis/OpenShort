@@ -12,6 +12,19 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var databaseProvider = builder.Configuration["DatabaseProvider"];
 
+// Check for individual MYSQL_ environment variables to support container configuration
+var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
+if (!string.IsNullOrEmpty(mysqlHost))
+{
+    var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
+    var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "openshort";
+    var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
+    var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "";
+    
+    connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};User={mysqlUser};Password={mysqlPassword};";
+    databaseProvider = "MySql"; // Force provider if env vars are present
+}
+
 // Determine provider based on configuration or connection string format
 bool useMySql = string.Equals(databaseProvider, "MySql", StringComparison.OrdinalIgnoreCase) || 
                 (!string.IsNullOrEmpty(connectionString) && connectionString.Contains("Server=", StringComparison.OrdinalIgnoreCase));
@@ -159,7 +172,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Seed initial data (migrations are handled by init container)
+// Seed initial data and apply migrations
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
@@ -169,6 +182,11 @@ using (var scope = app.Services.CreateScope())
     
     try
     {
+        // Auto-apply migrations
+        logger.LogInformation("Applying database migrations...");
+        await context.Database.MigrateAsync();
+        logger.LogInformation("Database migrations applied successfully.");
+
         // Only seed if database is accessible and not already seeded
         if (context.Database.CanConnect())
         {
@@ -179,9 +197,15 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred during data seeding.");
+        logger.LogError(ex, "An error occurred during database migration or seeding.");
         // Don't fail startup for seeding errors in production
     }
 }
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
+app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 app.Run();

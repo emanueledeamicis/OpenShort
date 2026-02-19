@@ -9,7 +9,8 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
 - 🔐 JWT-based authentication with ASP.NET Identity
 - 📊 Dashboard with statistics
 - 🎨 Modern UI with Angular and PrimeNG
-- 🐳 Docker deployment ready
+- 🐳 **Single Container Architecture** (Backend + Frontend in one image)
+- 💾 **Flexible Storage**: Zero-config SQLite (default) or MySQL support
 - 🔄 Collision-resistant slug generation with automatic retry
 
 ## Tech Stack
@@ -40,20 +41,22 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
    cd OpenShort
    ```
 
-2. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env and set secure passwords for mysql and jwt encryption
-   ```
-
-3. **Start the application**
+2. **Start the application (SQLite Default)**
+   By default, OpenShort uses an embedded SQLite database. Zero configuration required!
    ```bash
    docker compose up -d
    ```
 
-4. **Access the application**
-   - Frontend: http://localhost:83
-   - Backend API: http://localhost:6000
+   **Option: Use MySQL**
+   To use an external MySQL database instead of SQLite, set the following environment variables in `docker-compose.yml` or pass them to `docker run`:
+   - `MYSQL_HOST`
+   - `MYSQL_PORT` (default: 3306)
+   - `MYSQL_DATABASE`
+   - `MYSQL_USER`
+   - `MYSQL_PASSWORD`
+
+3. **Access the application**
+   - Application URL: http://localhost:8080
 
 ### First Login
 
@@ -66,12 +69,12 @@ Default credentials (created by DbSeeder):
 ### Stopping the application
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
-To remove volumes (⚠️ deletes all data):
+To remove volumes (defaults to deleting SQLite data):
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ## Updating
@@ -164,11 +167,19 @@ OpenShort/
 
 Key variables in `.env`:
 
+Values for `.env` or Docker environment variables:
+
 ```env
-MYSQL_ROOT_PASSWORD=your_secure_password
+# Optional: MySQL Configuration (leave empty for SQLite)
+MYSQL_HOST=your-mysql-server
+MYSQL_PORT=3306
 MYSQL_DATABASE=openshort
+MYSQL_USER=root
+MYSQL_PASSWORD=secure_password
+
+# Security
+JWT_SECRET_KEY=your_secure_random_key_at_least_32_chars
 ASPNETCORE_ENVIRONMENT=Production
-JWT_SECRET_KEY=your_secure_random_key
 ```
 
 ### JWT Secret Key
@@ -207,19 +218,16 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://localhost:83; # Frontend port
+        proxy_pass http://localhost:8080; # Single container port
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /api {
-        proxy_pass http://localhost:6000; # Backend API port
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Websocket support (optional, for SignalR/HMR if used)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
 }
 ```

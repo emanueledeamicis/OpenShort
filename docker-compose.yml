@@ -1,68 +1,26 @@
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: openshort-mysql
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-    volumes:
-      - openshort-mysql-data:/var/lib/mysql
-    networks:
-      - openshort-network
-    healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  migrations:
+  openshort:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: migrations
-    container_name: openshort-migrations
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: openshort
     environment:
-      ConnectionStrings__DefaultConnection: "Server=mysql;Database=${MYSQL_DATABASE};User=root;Password=${MYSQL_ROOT_PASSWORD};"
-    depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - openshort-network
-    restart: "no"
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: openshort-backend
-    environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=mysql;Database=${MYSQL_DATABASE};User=root;Password=${MYSQL_ROOT_PASSWORD};"
-      Jwt__Key: ${JWT_SECRET_KEY}
+      # Override these to use MySQL:
+      # ConnectionStrings__DefaultConnection: "Server=your-mysql-server;Database=your-db;User=your-user;Password=your-password;"
+      # Jwt__Key: ${JWT_SECRET_KEY}
     ports:
-      - "6000:8080"
-    depends_on:
-      migrations:
-        condition: service_completed_successfully
+      - "80:8080"
+    volumes:
+      - openshort-data:/app
     networks:
       - openshort-network
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: openshort-frontend
-    ports:
-      - "83:80"
-    depends_on:
-      - backend
-    networks:
-      - openshort-network
+    restart: unless-stopped
 
 networks:
   openshort-network:
     driver: bridge
 
 volumes:
-  openshort-mysql-data:
+  openshort-data:

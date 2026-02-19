@@ -4,10 +4,31 @@ using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 using OpenShort.Core;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+// Database Configuration
+var contentRoot = builder.Environment.ContentRootPath;
+var webRoot = Path.Combine(contentRoot, "wwwroot");
+Console.WriteLine($"[DEBUG] ContentRootPath: {contentRoot}");
+Console.WriteLine($"[DEBUG] Calculated WebRootPath: {webRoot}");
+
+// Force WebRootPath to be correct
+builder.Environment.WebRootPath = webRoot;
+
+if (Directory.Exists(webRoot))
+{
+    Console.WriteLine($"[DEBUG] 'wwwroot' directory FOUND at: {webRoot}");
+    var files = Directory.GetFiles(webRoot);
+    Console.WriteLine($"[DEBUG] Files in wwwroot: {string.Join(", ", files.Select(Path.GetFileName))}");
+}
+else
+{
+    Console.WriteLine($"[DEBUG] 'wwwroot' directory NOT FOUND at: {webRoot}");
+}
+
 // Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var databaseProvider = builder.Configuration["DatabaseProvider"];
@@ -167,6 +188,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseStatusCodePages();
+
+app.Use(async (context, next) =>
+{
+    Console.WriteLine($"[Middleware] Request: {context.Request.Method} {context.Request.Path}");
+    await next();
+});
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

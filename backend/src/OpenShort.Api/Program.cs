@@ -27,7 +27,7 @@ if (!string.IsNullOrEmpty(mysqlHost))
     var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
     var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "";
     
-    connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};User={mysqlUser};Password={mysqlPassword};";
+    connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};User={mysqlUser};Password={mysqlPassword};SslMode=None;";
     databaseProvider = "MySql"; // Force provider if env vars are present
 }
 

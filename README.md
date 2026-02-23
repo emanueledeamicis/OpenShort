@@ -55,7 +55,8 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
    4. Run `docker compose up -d`.
 
 3. **Access the application**
-   - Application URL: http://localhost:8888
+   - Dashboard (Frontend): http://localhost:8888
+   - API & Redirects (Backend): http://localhost:8889
 
 ### First Login
 
@@ -218,17 +219,22 @@ server {
     listen 80;
     server_name your-domain.com;
 
+    # Dashboard & Frontend SPA
     location / {
-        proxy_pass http://localhost:8888; # Docker container port
+        proxy_pass http://localhost:8888; # Docker frontend port
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # Websocket support (optional, for SignalR/HMR if used)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
+    }
+
+    # REST APIs and Short Link Redirects
+    location ~* ^/(api|.{6})$ {
+        proxy_pass http://localhost:8889; # Docker backend API port
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```

@@ -29,12 +29,24 @@ RUN dotnet publish "OpenShort.Api.csproj" -c Release -o /app/publish /p:UseAppHo
 # Stage 4: Final Image
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
+
+# Install Nginx and Supervisor
+RUN apt-get update && \
+    apt-get install -y nginx supervisor && \
+    rm -rf /var/lib/apt/lists/*
+
 EXPOSE 8080
+EXPOSE 8081
 
 # Copy compiled backend
 COPY --from=publish /app/publish .
 
-# Copy compiled frontend to wwwroot
-COPY --from=frontend-build /app/dist/OpenShort.Frontend/browser ./wwwroot
+# Copy compiled frontend to Nginx web root
+COPY --from=frontend-build /app/dist/OpenShort.Frontend/browser /var/www/html
 
-ENTRYPOINT ["dotnet", "OpenShort.Api.dll"]
+# Copy configuration files
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Start supervisord directly
+ENTRYPOINT ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

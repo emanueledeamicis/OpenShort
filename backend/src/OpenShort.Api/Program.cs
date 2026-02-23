@@ -4,21 +4,10 @@ using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 using OpenShort.Core;
-using Microsoft.Extensions.FileProviders;
 using System.Threading.Channels;
 using OpenShort.Core.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Web Dasbhoard Configuration
-var contentRoot = builder.Environment.ContentRootPath;
-var webRoot = Path.Combine(contentRoot, "wwwroot");
-
-// Ensure wwwroot directory exists to prevent PhysicalFileProvider crashes
-if (!Directory.Exists(webRoot))
-{
-    Directory.CreateDirectory(webRoot);
-}
 
 // Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -193,15 +182,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStatusCodePages();
 
-
-
-app.UseDefaultFiles();
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(webRoot),
-    RequestPath = ""
-});
-
 app.UseRouting(); // Explicitly add routing
 
 app.UseAuthentication(); // Ensure Authentication Middleware is called
@@ -248,6 +228,5 @@ using (var scope = app.Services.CreateScope())
 
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
 
 app.Run();

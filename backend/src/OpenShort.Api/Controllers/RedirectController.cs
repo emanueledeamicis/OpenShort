@@ -1,19 +1,22 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using OpenShort.Infrastructure.Data;
+using OpenShort.Core.Entities;
+using OpenShort.Core.Interfaces;
+using System.Threading.Channels;
 
 namespace OpenShort.Api.Controllers;
 
 [ApiController]
 public class RedirectController : ControllerBase
 {
-    private readonly AppDbContext _context;
     private readonly ILogger<RedirectController> _logger;
+    private readonly ILinkService _linkService;
+    private readonly ChannelWriter<ClickEvent> _clickChannel;
 
-    public RedirectController(AppDbContext context, ILogger<RedirectController> logger)
+    public RedirectController(ILogger<RedirectController> logger, ILinkService linkService, ChannelWriter<ClickEvent> clickChannel)
     {
-        _context = context;
         _logger = logger;
+        _linkService = linkService;
+        _clickChannel = clickChannel;
     }
 
     [HttpGet("{slug}")]
@@ -27,23 +30,29 @@ public class RedirectController : ControllerBase
             }
 
             var host = Request.Host.Host; // Get domain without port
-            
-            var link = await _context.Links
-                .FirstOrDefaultAsync(l => l.Slug == slug && l.Domain == host);
 
-            if (link == null || !link.IsActive || (link.ExpiresAt.HasValue && link.ExpiresAt < DateTime.UtcNow))
+            // Get link (either from cache or DB)
+            var link = await _linkService.GetCachedLinkAsync(host, slug);
+
+            if (link == null)
             {
                 _logger.LogWarning("Redirect failed: Link not found or inactive for slug {Slug} on host {Host}", slug, host);
                 return NotFound();
             }
 
-            // Tracking
-            link.ClickCount++;
-            link.LastAccessedAt = DateTime.UtcNow;
+            // Tracking asynchronously - Fire and Forget via Channel
+            var clickEvent = new ClickEvent
+            {
+                Slug = slug,
+                Domain = host,
+                Timestamp = DateTime.UtcNow
+            };
             
-            // We don't want to block the redirect too long for DB writes in a real high-scale app, 
-            // but for MVP direct save is fine.
-            await _context.SaveChangesAsync();
+            // TryWrite is fire-and-forget, non-blocking
+            if (!_clickChannel.TryWrite(clickEvent))
+            {
+                _logger.LogWarning("Failed to enqueue click event for {Domain}/{Slug}. Channel might be full.", host, slug);
+            }
 
             _logger.LogInformation("Redirecting slug {Slug} to {DestinationUrl}", slug, link.DestinationUrl);
 

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
@@ -24,7 +25,9 @@ public class LinkServiceTests
 
         _context = new AppDbContext(options);
         _mockSlugGenerator = new Mock<ISlugGenerator>();
-        _linkService = new LinkService(_context, _mockSlugGenerator.Object);
+        var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var mockSettingService = new Mock<ISettingService>();
+        _linkService = new LinkService(_context, _mockSlugGenerator.Object, memoryCache, mockSettingService.Object);
 
         // Seed default domain
         _context.Domains.Add(new Domain { Host = "test.com", IsActive = true });

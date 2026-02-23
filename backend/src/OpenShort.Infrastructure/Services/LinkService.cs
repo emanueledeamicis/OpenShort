@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Data;
@@ -9,11 +10,15 @@ public class LinkService : ILinkService
 {
     private readonly AppDbContext _context;
     private readonly ISlugGenerator _slugGenerator;
+    private readonly IMemoryCache _cache;
+    private readonly ISettingService _settingService;
 
-    public LinkService(AppDbContext context, ISlugGenerator slugGenerator)
+    public LinkService(AppDbContext context, ISlugGenerator slugGenerator, IMemoryCache cache, ISettingService settingService)
     {
         _context = context;
         _slugGenerator = slugGenerator;
+        _cache = cache;
+        _settingService = settingService;
     }
 
     public async Task<IEnumerable<Link>> GetAllAsync()
@@ -29,6 +34,34 @@ public class LinkService : ILinkService
     public async Task<Link?> GetBySlugAsync(string slug)
     {
         return await _context.Links.FirstOrDefaultAsync(l => l.Slug == slug);
+    }
+
+    public async Task<Link?> GetCachedLinkAsync(string domain, string slug)
+    {
+        var cacheKey = $"redirect_{domain}_{slug}";
+
+        // 1. Try get from cache
+        if (!_cache.TryGetValue(cacheKey, out Link? link))
+        {
+            // 2. If not in cache, get from DB
+            link = await _context.Links
+                .FirstOrDefaultAsync(l => l.Slug == slug && l.Domain == domain);
+
+            if (link != null && link.IsActive && (!link.ExpiresAt.HasValue || link.ExpiresAt >= DateTime.UtcNow))
+            {
+                // 3. Save to cache if valid
+                var cacheDurationSeconds = await _settingService.GetSettingIntAsync("CacheDurationSeconds", 60);
+                if (cacheDurationSeconds > 0)
+                {
+                    var cacheEntryOptions = new MemoryCacheEntryOptions()
+                        .SetAbsoluteExpiration(TimeSpan.FromSeconds(cacheDurationSeconds));
+                    
+                    _cache.Set(cacheKey, link, cacheEntryOptions);
+                }
+            }
+        }
+
+        return link;
     }
 
     public async Task<Link?> CreateAsync(Link link)
@@ -89,6 +122,10 @@ public class LinkService : ILinkService
         try
         {
             await _context.SaveChangesAsync();
+            
+            // Invalidate cache
+            _cache.Remove($"redirect_{link.Domain}_{link.Slug}");
+            
             return true;
         }
         catch (DbUpdateConcurrencyException)
@@ -111,6 +148,10 @@ public class LinkService : ILinkService
 
         _context.Links.Remove(link);
         await _context.SaveChangesAsync();
+        
+        // Invalidate cache
+        _cache.Remove($"redirect_{link.Domain}_{link.Slug}");
+        
         return true;
     }
 

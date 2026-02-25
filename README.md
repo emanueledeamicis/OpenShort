@@ -55,8 +55,8 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
    4. Run `docker compose up -d`.
 
 3. **Access the application**
-   - Dashboard (Frontend): http://localhost:8888
-   - API & Redirects (Backend): http://localhost:8889
+   - Dashboard (Frontend): http://localhost:8081
+   - API & Redirects (Backend): http://localhost
 
 ### First Login
 

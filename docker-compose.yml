@@ -15,8 +15,8 @@ services:
       # - MYSQL_USER=openshort
       # - MYSQL_PASSWORD=openshort_password
     ports:
-      - "8888:8081" # Dashboard (Frontend)
-      - "8889:8080" # API and Redirects (Backend)
+      - "8081:8081" # Dashboard (Frontend)
+      - "80:8080" # API and Redirects (Backend)
     volumes:
       - openshort-data:/app/data
     restart: unless-stopped

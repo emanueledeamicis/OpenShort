@@ -10,6 +10,7 @@ using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Data;
 using OpenShort.Infrastructure.Services;
+using System.Threading.Channels;
 
 namespace OpenShort.Tests.Api;
 
@@ -37,7 +38,9 @@ public class LinksControllerTests
         
         var memoryCache = new MemoryCache(new MemoryCacheOptions());
         var mockSettingService = new Mock<ISettingService>();
-        _linkService = new LinkService(_context, _mockSlugGenerator.Object, memoryCache, mockSettingService.Object);
+        var channel = Channel.CreateUnbounded<ClickEvent>();
+        var mockLinkLogger = new Mock<ILogger<LinkService>>();
+        _linkService = new LinkService(_context, _mockSlugGenerator.Object, memoryCache, mockSettingService.Object, channel.Writer, mockLinkLogger.Object);
 
         // Seed default domain for existing tests
         _context.Domains.Add(new Domain { Host = "localhost", IsActive = true });

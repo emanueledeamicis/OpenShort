@@ -4,13 +4,10 @@ using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 using OpenShort.Core;
-using Microsoft.Extensions.FileProviders;
+using System.Threading.Channels;
+using OpenShort.Core.Entities;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Web Dasbhoard Configuration
-var contentRoot = builder.Environment.ContentRootPath;
-var webRoot = Path.Combine(contentRoot, "wwwroot");
 
 // Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -60,13 +57,26 @@ else
 // Configure SlugSettings
 builder.Services.Configure<SlugSettings>(builder.Configuration.GetSection("SlugSettings"));
 
+// Caching Configuration
+builder.Services.AddMemoryCache();
+
 builder.Services.AddScoped<ISlugGenerator, SlugGenerator>();
 builder.Services.AddScoped<IDomainService, DomainService>();
 builder.Services.AddScoped<ILinkService, LinkService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>(); // Register Token Service
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>(); // Register ApiKey Service
+builder.Services.AddScoped<ISettingService, SettingService>();
 
+// --- CLICK TRACKING CHANNEL ---
+// Create a bounded channel to prevent out-of-memory errors if DB is down.
+builder.Services.AddSingleton(Channel.CreateBounded<ClickEvent>(new BoundedChannelOptions(10000)
+{
+    FullMode = BoundedChannelFullMode.DropOldest
+}));
+builder.Services.AddSingleton(provider => provider.GetRequiredService<Channel<ClickEvent>>().Reader);
+builder.Services.AddSingleton(provider => provider.GetRequiredService<Channel<ClickEvent>>().Writer);
+builder.Services.AddHostedService<ClickTrackingBackgroundService>();
 
 // --- JWT AUTHENTICATION SETUP ---
 builder.Services.AddAuthentication(options =>
@@ -172,15 +182,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStatusCodePages();
 
-
-
-app.UseDefaultFiles();
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider(webRoot),
-    RequestPath = ""
-});
-
 app.UseRouting(); // Explicitly add routing
 
 app.UseAuthentication(); // Ensure Authentication Middleware is called
@@ -227,6 +228,5 @@ using (var scope = app.Services.CreateScope())
 
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
 
 app.Run();

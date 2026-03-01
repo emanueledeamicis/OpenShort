@@ -1,33 +1,30 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
 using OpenShort.Api.Controllers;
 using OpenShort.Core.Entities;
-using OpenShort.Infrastructure.Data;
+using OpenShort.Core.Interfaces;
 
 namespace OpenShort.Tests.Api;
 
 [TestFixture]
 public class RedirectControllerTests
 {
-    private AppDbContext _context;
     private Mock<ILogger<RedirectController>> _mockLogger;
     private RedirectController _controller;
+    private Mock<ILinkService> _mockLinkService;
 
     [SetUp]
     public void Setup()
     {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
-            .Options;
-
-        _context = new AppDbContext(options);
         _mockLogger = new Mock<ILogger<RedirectController>>();
-        _controller = new RedirectController(_context, _mockLogger.Object);
+        
+        _mockLinkService = new Mock<ILinkService>();
+        
+        _controller = new RedirectController(_mockLogger.Object, _mockLinkService.Object);
 
         // Mock HttpContext for Host request
         var httpContext = new DefaultHttpContext();
@@ -36,12 +33,6 @@ public class RedirectControllerTests
         {
             HttpContext = httpContext
         };
-    }
-
-    [TearDown]
-    public void TearDown()
-    {
-        _context.Dispose();
     }
 
     [Test]
@@ -56,8 +47,7 @@ public class RedirectControllerTests
             IsActive = true,
             RedirectType = RedirectType.Permanent
         };
-        _context.Links.Add(link);
-        await _context.SaveChangesAsync();
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "go")).ReturnsAsync(link);
 
         // Act
         var result = await _controller.RedirectToUrl("go");
@@ -67,16 +57,14 @@ public class RedirectControllerTests
         var redirectResult = result as RedirectResult;
         redirectResult!.Url.Should().Be("https://google.com");
         redirectResult.Permanent.Should().BeTrue();
-
-        // Verify Tracking
-        var dbLink = await _context.Links.FindAsync(link.Id);
-        dbLink!.ClickCount.Should().Be(1);
-        dbLink.LastAccessedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(2));
     }
 
     [Test]
     public async Task RedirectToUrl_ShouldReturnNotFound_WhenLinkDoesNotExist()
     {
+        // Arrange
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "unknown")).ReturnsAsync((Link?)null);
+
         // Act
         var result = await _controller.RedirectToUrl("unknown");
 
@@ -88,14 +76,7 @@ public class RedirectControllerTests
     public async Task RedirectToUrl_ShouldReturnNotFound_WhenLinkIsExpired()
     {
         // Arrange
-        _context.Links.Add(new Link
-        {
-            Slug = "expired",
-            DestinationUrl = "https://old.com",
-            Domain = "localhost",
-            ExpiresAt = DateTime.UtcNow.AddDays(-1)
-        });
-        await _context.SaveChangesAsync();
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "expired")).ReturnsAsync((Link?)null); // Service returns null if expired
 
         // Act
         var result = await _controller.RedirectToUrl("expired");

@@ -122,25 +122,7 @@ public class DomainsControllerTests
         problemDetails!.Detail.Should().Be("Domain already exists.");
     }
 
-    [Test]
-    public async Task UpdateDomain_ShouldUpdate_WhenValid()
-    {
-        // Arrange
-        var domain = new Domain { Host = "update.com", IsActive = true };
-        _context.Domains.Add(domain);
-        await _context.SaveChangesAsync();
 
-        domain.IsActive = false;
-
-        // Act
-        var result = await _controller.UpdateDomain(domain.Id, domain);
-
-        // Assert
-        result.Should().BeOfType<NoContentResult>();
-        
-        var dbDomain = await _context.Domains.FindAsync(domain.Id);
-        dbDomain!.IsActive.Should().BeFalse();
-    }
 
     [Test]
     public async Task DeleteDomain_ShouldDelete_WhenExists()

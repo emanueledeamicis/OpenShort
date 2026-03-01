@@ -12,3 +12,4 @@ dist/
 notes.md
 .agent
 openshort.db*
+.agents

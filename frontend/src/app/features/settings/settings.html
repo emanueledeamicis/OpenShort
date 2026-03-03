@@ -1,15 +1,16 @@
-<div class="page-container">
-    <div class="page-header">
-        <div>
-            <h1 class="page-title">Settings</h1>
-            <p class="page-subtitle">Configure system-wide settings and caching</p>
-        </div>
+<div class="px-6 py-8">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-0">⚙️ Settings</h1>
     </div>
 
-    <div class="content-container p-4 surface-card border-round shadow-1">
+    <div class="card bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl p-6">
+        <h2 class="text-xl font-semibold text-surface-900 dark:text-surface-0 mb-2">System Settings</h2>
+        <p class="text-surface-600 dark:text-surface-400 mb-4">
+            Configure system-wide settings and caching.
+        </p>
         <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()" class="flex flex-col gap-5 w-full max-w-lg">
             <div class="flex flex-col gap-2">
-                <label for="cacheDuration" class="font-bold text-surface-900 dark:text-surface-0">Cache Duration
+                <label for="cacheDuration" class="font-medium text-surface-700 dark:text-surface-300">Cache Duration
                     (Seconds)</label>
                 <p class="text-sm text-surface-500 m-0">
                     The amount of time a redirect URL will be served directly from memory before expiring. Set to 0 to

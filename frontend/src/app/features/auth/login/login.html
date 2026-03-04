@@ -18,6 +18,10 @@
 
       <p-button label="Sign In" [loading]="loading" [disabled]="!email || !password" (onClick)="onLogin()"
         styleClass="w-full" />
+
+      <div class="text-center mt-2">
+        <span class="text-xs text-surface-500 dark:text-surface-400">v{{version}}</span>
+      </div>
     </div>
   </p-card>
 </div>

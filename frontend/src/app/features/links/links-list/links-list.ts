@@ -298,4 +298,10 @@ export class LinksListComponent implements OnInit, OnDestroy {
         });
         this.subscription.add(sub);
     }
+
+    copyToClipboard(url: string) {
+        navigator.clipboard.writeText(url).catch(err => {
+            console.error('Failed to copy to clipboard', err);
+        });
+    }
 }

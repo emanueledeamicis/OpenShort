@@ -1,29 +1,28 @@
 # OpenShort
 
-A self-hosted URL shortener built with .NET 9 and Angular 19.
+A self-hosted URL shortener built with .NET 9 and Angular 21.
 
 ## Features
 
 - 🔗 Create and manage short links
 - 🌐 Multi-domain support
 - 🔐 JWT-based authentication with ASP.NET Identity
-- 📊 Dashboard with statistics
 - 🎨 Modern UI with Angular and PrimeNG
 - 🐳 **Single Container Architecture** (Backend + Frontend in one image)
-- 💾 **Flexible Storage**: Zero-config SQLite (default) or MySQL support
+- 💾 **Flexible Storage**: Zero-config SQLite (default) or external MySQL support
 - 🔄 Collision-resistant slug generation with automatic retry
 
 ## Tech Stack
 
 **Backend:**
 - .NET 9 (ASP.NET Core Web API)
-- Entity Framework Core with MySQL
+- Entity Framework Core
 - ASP.NET Identity for authentication
 - FluentValidation
 - NUnit for testing
 
 **Frontend:**
-- Angular 19 with standalone components
+- Angular 21 with standalone components
 - PrimeNG UI components
 - Tailwind CSS v3
 - Reactive Forms
@@ -55,8 +54,8 @@ A self-hosted URL shortener built with .NET 9 and Angular 19.
    4. Run `docker compose up -d`.
 
 3. **Access the application**
-   - Dashboard (Frontend): http://localhost:8081
-   - API & Redirects (Backend): http://localhost
+   - Dashboard (Frontend): http://{{server-ip}}:8081
+   - API & Redirects (Backend): http://{{server-ip}} (default on port 80)
 
 ### First Login
 
@@ -64,7 +63,7 @@ Default credentials (created by DbSeeder):
 - **Email**: `admin@openshort.local`
 - **Password**: `Admin123!`
 
-⚠️ **Change these credentials immediately after first login!**
+⚠️ **Change the password immediately after first login!**
 
 ### Stopping the application
 
@@ -72,7 +71,7 @@ Default credentials (created by DbSeeder):
 docker compose down
 ```
 
-To remove volumes (defaults to deleting SQLite data):
+To remove volumes (⚠️⚠️⚠️ defaults to deleting SQLite data):
 ```bash
 docker compose down -v
 ```
@@ -122,6 +121,8 @@ dotnet test
 ```
 
 **Entity Framework migrations:**
+> **Note:** OpenShort dynamically selects the database provider. By default, running these commands applies SQLite migrations. To run MySQL migrations during development, you must set the `MYSQL_HOST` environment variable before running the command.
+
 ```bash
 cd backend/src/OpenShort.Api
 dotnet ef migrations add MigrationName --project ../OpenShort.Infrastructure
@@ -213,24 +214,16 @@ Point your domain or subdomain to your server's IP address:
 ### 2. Reverse Proxy & SSL (Recommended)
 It is highly recommended to run OpenShort behind a reverse proxy like **Nginx**, **Traefik**, or **Caddy** with HTTPS enabled.
 
-#### Example Nginx Configuration:
+#### Example Nginx Reverse Proxy Configuration:
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;
+    server_name your-short-domain.com;
 
-    # Dashboard & Frontend SPA
+    # Expose only REST APIs and Short Link Redirects to the public internet
+    # The Dashboard is omitted for security and accessible only via IP:8081 locally or via VPN
     location / {
-        proxy_pass http://localhost:8888; # Docker frontend port
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # REST APIs and Short Link Redirects
-    location ~* ^/(api|.{6})$ {
-        proxy_pass http://localhost:8889; # Docker backend API port
+        proxy_pass http://localhost:80; # Docker mapped backend port
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

@@ -14,7 +14,7 @@ import packageJson from '../../../../../package.json';
       <aside class="w-64 bg-surface-0 dark:bg-surface-900 border-r border-surface-200 dark:border-surface-700 p-4 flex flex-col">
         <div class="flex flex-col gap-1 mb-8 px-2">
             <div class="flex items-center gap-2">
-                <span class="text-xl font-bold text-primary-500">OpenShort</span>
+                <img src="/assets/logo-horizontal.png" alt="OpenShort Logo" class="h-8 w-auto mix-blend-multiply dark:mix-blend-normal" />
             </div>
             <span class="text-xs text-surface-500 dark:text-surface-400">v{{version}}</span>
         </div>
@@ -45,16 +45,13 @@ import packageJson from '../../../../../package.json';
                 <i class="pi pi-cog"></i>
                 <span class="font-medium">Settings</span>
             </a>
-        </nav>
-
-        <div class="mt-auto pt-4 border-t border-surface-200 dark:border-surface-700">
              <button 
                 (click)="logout()"
-                class="w-full p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors text-left">
+                class="w-full text-left p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
                 <i class="pi pi-sign-out"></i>
                 <span class="font-medium">Logout</span>
             </button>
-        </div>
+        </nav>
       </aside>
 
       <!-- Main Content -->

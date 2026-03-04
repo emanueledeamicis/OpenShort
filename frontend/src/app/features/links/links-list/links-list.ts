@@ -143,6 +143,22 @@ export class LinksListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
 
         const dto = this.linkForm.value;
+
+        // Lowercase the slug if provided
+        if (dto.slug) {
+            dto.slug = dto.slug.toLowerCase();
+        }
+
+        // Lowercase protocol and host of the destination URL
+        try {
+            if (dto.destinationUrl) {
+                const urlObj = new URL(dto.destinationUrl);
+                urlObj.protocol = urlObj.protocol.toLowerCase();
+                urlObj.hostname = urlObj.hostname.toLowerCase();
+                dto.destinationUrl = urlObj.toString();
+            }
+        } catch (e) { /* Let backend or regex catch invalid URLs */ }
+
         const sub = this.linkService.create(dto).subscribe({
             next: () => {
                 this.saving = false;
@@ -190,6 +206,17 @@ export class LinksListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
 
         const dto: UpdateLinkDto = this.editForm.value;
+
+        // Lowercase protocol and host of the destination URL
+        try {
+            if (dto.destinationUrl) {
+                const urlObj = new URL(dto.destinationUrl);
+                urlObj.protocol = urlObj.protocol.toLowerCase();
+                urlObj.hostname = urlObj.hostname.toLowerCase();
+                dto.destinationUrl = urlObj.toString();
+            }
+        } catch (e) { /* Let backend or regex catch invalid URLs */ }
+
         const sub = this.linkService.update(this.selectedLink.id!, dto).subscribe({
             next: () => {
                 this.saving = false;
@@ -270,5 +297,11 @@ export class LinksListComponent implements OnInit, OnDestroy {
             }
         });
         this.subscription.add(sub);
+    }
+
+    copyToClipboard(url: string) {
+        navigator.clipboard.writeText(url).catch(err => {
+            console.error('Failed to copy to clipboard', err);
+        });
     }
 }

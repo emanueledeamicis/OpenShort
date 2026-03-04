@@ -101,6 +101,10 @@ export class DomainsListComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
 
         const dto = this.domainForm.value;
+        if (dto.host) {
+            dto.host = dto.host.toLowerCase();
+        }
+
         const sub = this.domainService.create(dto).subscribe({
             next: () => {
                 this.saving = false;

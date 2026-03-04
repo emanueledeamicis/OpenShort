@@ -7,6 +7,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { ButtonModule } from 'primeng/button';
 import { MessageModule } from 'primeng/message';
 import { AuthService } from '../../../core/services/auth.service';
+import packageJson from '../../../../../package.json';
 
 @Component({
   selector: 'app-login',
@@ -16,6 +17,7 @@ import { AuthService } from '../../../core/services/auth.service';
   styleUrl: './login.css'
 })
 export class LoginComponent {
+  version = packageJson.version;
   email = '';
   password = '';
   loading = false;

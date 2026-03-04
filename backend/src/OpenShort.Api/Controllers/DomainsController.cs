@@ -50,7 +50,7 @@ public class DomainsController : ControllerBase
         
         var domain = new Domain
         {
-            Host = dto.Host,
+            Host = dto.Host.ToLowerInvariant(),
             IsActive = true
         };
 

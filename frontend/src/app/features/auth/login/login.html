@@ -1,6 +1,9 @@
 <div class="flex items-center justify-center min-h-screen bg-surface-50 dark:bg-surface-950">
-  <p-card header="OpenShort Login" [style]="{ width: '25rem' }" styleClass="shadow-lg">
+  <p-card [style]="{ width: '25rem' }" styleClass="shadow-lg">
     <div class="flex flex-col gap-4">
+      <div class="flex justify-center mb-2">
+        <img src="/assets/logo-horizontal.png" alt="OpenShort Logo" class="h-10 w-auto" />
+      </div>
       <!-- Error Message -->
       <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage"></p-message>
 

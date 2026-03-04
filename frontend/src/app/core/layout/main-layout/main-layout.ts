@@ -14,7 +14,7 @@ import packageJson from '../../../../../package.json';
       <aside class="w-64 bg-surface-0 dark:bg-surface-900 border-r border-surface-200 dark:border-surface-700 p-4 flex flex-col">
         <div class="flex flex-col gap-1 mb-8 px-2">
             <div class="flex items-center gap-2">
-                <span class="text-xl font-bold text-primary-500">OpenShort</span>
+                <img src="/assets/logo-horizontal.png" alt="OpenShort Logo" class="h-8 w-auto mix-blend-multiply dark:mix-blend-normal" />
             </div>
             <span class="text-xs text-surface-500 dark:text-surface-400">v{{version}}</span>
         </div>

@@ -79,11 +79,17 @@ public class LinksController : ControllerBase
             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: $"Domain '{targetDomainHost}' is not active.");
         }
 
+        // Format Destination URL
+        var uriBuilder = new UriBuilder(dto.DestinationUrl);
+        uriBuilder.Scheme = uriBuilder.Scheme.ToLowerInvariant();
+        uriBuilder.Host = uriBuilder.Host.ToLowerInvariant();
+        var formattedDestinationUrl = uriBuilder.Uri.ToString();
+
         // 3. Create Link via Service
         var link = new Link
         {
-            DestinationUrl = dto.DestinationUrl,
-            Slug = dto.Slug, // Service handles conflict if not null, or auto-gen if null
+            DestinationUrl = formattedDestinationUrl,
+            Slug = dto.Slug?.ToLowerInvariant(), // Service handles conflict if not null, or auto-gen if null
             Domain = targetDomainHost,
             Title = dto.Title,
             Notes = dto.Notes,
@@ -123,8 +129,14 @@ public class LinksController : ControllerBase
             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "URL scheme is not allowed.");
         }
 
+        // Format Destination URL
+        var uriBuilder = new UriBuilder(dto.DestinationUrl);
+        uriBuilder.Scheme = uriBuilder.Scheme.ToLowerInvariant();
+        uriBuilder.Host = uriBuilder.Host.ToLowerInvariant();
+        var formattedDestinationUrl = uriBuilder.Uri.ToString();
+
         // 3. Update fields
-        existingLink.DestinationUrl = dto.DestinationUrl;
+        existingLink.DestinationUrl = formattedDestinationUrl;
         existingLink.RedirectType = dto.RedirectType;
         existingLink.Title = dto.Title;
         existingLink.Notes = dto.Notes;

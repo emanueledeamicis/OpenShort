@@ -13,14 +13,14 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var databaseProvider = builder.Configuration["DatabaseProvider"];
 
-// Check for individual MYSQL_ environment variables to support container configuration
-var mysqlHost = Environment.GetEnvironmentVariable("MYSQL_HOST");
+// Check for individual MYSQL_ configurations from Environment, User Secrets, or appsettings
+var mysqlHost = builder.Configuration["MYSQL_HOST"];
 if (!string.IsNullOrEmpty(mysqlHost))
 {
-    var mysqlPort = Environment.GetEnvironmentVariable("MYSQL_PORT") ?? "3306";
-    var mysqlDatabase = Environment.GetEnvironmentVariable("MYSQL_DATABASE") ?? "openshort";
-    var mysqlUser = Environment.GetEnvironmentVariable("MYSQL_USER") ?? "root";
-    var mysqlPassword = Environment.GetEnvironmentVariable("MYSQL_PASSWORD") ?? "";
+    var mysqlPort = builder.Configuration["MYSQL_PORT"] ?? "3306";
+    var mysqlDatabase = builder.Configuration["MYSQL_DATABASE"] ?? "openshort";
+    var mysqlUser = builder.Configuration["MYSQL_USER"] ?? "root";
+    var mysqlPassword = builder.Configuration["MYSQL_PASSWORD"] ?? "";
     
     connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};User={mysqlUser};Password={mysqlPassword};SslMode=None;";
     databaseProvider = "MySql"; // Force provider if env vars are present
@@ -68,6 +68,9 @@ builder.Services.AddScoped<ITokenService, TokenService>(); // Register Token Ser
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>(); // Register ApiKey Service
 builder.Services.AddScoped<ISettingService, SettingService>();
 
+// Register JWT Key Provider
+builder.Services.AddScoped<IJwtKeyProvider, JwtKeyProvider>();
+
 // --- CLICK TRACKING CHANNEL ---
 // Create a bounded channel to prevent out-of-memory errors if DB is down.
 builder.Services.AddSingleton(Channel.CreateBounded<ClickEvent>(new BoundedChannelOptions(10000)
@@ -90,12 +93,23 @@ builder.Services.AddAuthentication(options =>
     options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? "SuperSecretKeyForDevelopmentOnly_ChangeInProduction_AtLeast32CharsLong")),
+        // The IssuerSigningKey check is handled dynamically in Events
         ValidateIssuer = true,
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidateAudience = true,
         ValidAudience = builder.Configuration["Jwt:Audience"],
         ClockSkew = TimeSpan.Zero
+    };
+    
+    options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+    {
+        OnMessageReceived = async context =>
+        {
+            var jwtProvider = context.HttpContext.RequestServices.GetRequiredService<IJwtKeyProvider>();
+            var secretKey = await jwtProvider.GetOrGenerateKeyAsync();
+            
+            context.Options.TokenValidationParameters.IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(secretKey));
+        }
     };
 })
 .AddScheme<OpenShort.Api.Auth.ApiKeyAuthOptions, OpenShort.Api.Auth.ApiKeyAuthHandler>(
@@ -214,7 +228,7 @@ using (var scope = app.Services.CreateScope())
         if (context.Database.CanConnect())
         {
             logger.LogInformation("Checking if initial data seeding is required...");
-            await DbSeeder.SeedAsync(context, userManager);
+            await DbSeeder.SeedAsync(context, userManager, services);
             logger.LogInformation("Data seeding check completed.");
         }
     }

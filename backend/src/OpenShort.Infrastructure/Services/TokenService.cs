@@ -11,16 +11,15 @@ namespace OpenShort.Infrastructure.Services;
 public class TokenService : ITokenService
 {
     private readonly IConfiguration _config;
-    private readonly SymmetricSecurityKey _key;
+    private readonly IJwtKeyProvider _jwtKeyProvider;
 
-    public TokenService(IConfiguration config)
+    public TokenService(IConfiguration config, IJwtKeyProvider jwtKeyProvider)
     {
         _config = config;
-        var tokenKey = _config["Jwt:Key"] ?? "SuperSecretKeyForDevelopmentOnly_ChangeInProduction_AtLeast32CharsLong";
-        _key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenKey));
+        _jwtKeyProvider = jwtKeyProvider;
     }
 
-    public string CreateToken(IdentityUser user, IList<string> roles)
+    public async Task<string> CreateTokenAsync(IdentityUser user, IList<string> roles)
     {
         // Claims
         var claims = new List<Claim>
@@ -35,8 +34,12 @@ public class TokenService : ITokenService
         // Add Roles
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
+        // Get dynamic or auto-generated key
+        var secretKey = await _jwtKeyProvider.GetOrGenerateKeyAsync();
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+
         // Credentials
-        var creds = new SigningCredentials(_key, SecurityAlgorithms.HmacSha256Signature);
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
 
         // Descriptor
         var tokenDescriptor = new SecurityTokenDescriptor

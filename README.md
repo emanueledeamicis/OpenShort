@@ -97,10 +97,7 @@ When a new version is available, follow these steps to update your installation:
 
 3. **Verify the update**
    ```bash
-   docker compose logs -f
-   ```
-
-> **Note:** Your `.env` file and database data are preserved during updates. Make sure to keep a backup of your `.env` file in a secure location outside the repository.
+> **Note:** The SQLite database and OpenShort settings (including JWT keys) are pre-configured out-of-the-box and stored in Docker Volumes! Make sure you don't delete the volumes using the `-v` flag during the update process if you rely on the embedded SQLite database.
 
 > **Future:** When pre-built images are published to a container registry, the update process will be simplified to `docker compose pull && docker compose up -d`.
 
@@ -164,45 +161,44 @@ OpenShort/
 └── docker-compose.yml              # Docker orchestration
 ```
 
+## Database Configuration
+
+OpenShort is designed with a **Zero-Config** approach. By default, if you spin up the container without providing any database parameters, it will automatically create and use an **embedded SQLite database**. This is perfect for quick deployments, personal use, or testing!
+
+If you prefer a more robust external database for heavy workloads, OpenShort fully supports **MySQL**. You just need to provide the MySQL connection parameters via Environment Variables.
+
 ## Environment Variables
 
-Key variables in `.env`:
+All Environment Variables can be configured directly inside the `environment:` section of your `docker-compose.yml` file. Most of them are entirely optional!
 
-Values for `.env` or Docker environment variables:
-
-```env
-# Optional: MySQL Configuration (leave empty for SQLite)
-MYSQL_HOST=your-mysql-server
-MYSQL_PORT=3306
-MYSQL_DATABASE=openshort
-MYSQL_USER=root
-MYSQL_PASSWORD=secure_password
+```yaml
+# Optional: MySQL Configuration (leave empty for SQLite default logic)
+- MYSQL_HOST=your-mysql-server
+- MYSQL_PORT=3306
+- MYSQL_DATABASE=openshort
+- MYSQL_USER=root
+- MYSQL_PASSWORD=secure_password
 
 # Security
-JWT_SECRET_KEY=your_secure_random_key_at_least_32_chars
-ASPNETCORE_ENVIRONMENT=Production
+- ASPNETCORE_ENVIRONMENT=Production
 
 > **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (e.g. `Password$$` becomes `Password$$$$`) to prevent Docker from interpreting them as variables.
 ```
 
 ### JWT Secret Key
 
-The `JWT_SECRET_KEY` must be changed for production deployments. Generate a secure random key:
+> 💡 **New in OpenShort v1.1+**: The JWT Key (`JWT_SECRET_KEY`) is now **auto-generated and securely saved into the database** on the very first application startup. You no longer need to configure it manually, ensuring a true *Zero-Config* and secure installation out of the box!
 
-**Linux/Mac:**
-```bash
-openssl rand -base64 32
-```
+If you have specific needs (e.g., cluster deployments or manual key rotation policies), you can still override the auto-generated key by explicitly passing it as an environment variable or argument:
 
-**Windows PowerShell:**
-```powershell
-[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
-```
+1. Inside your `docker-compose.yml` or via the `docker run` command, simply add the parameter under the `environment:` section:
+   ```yaml
+   environment:
+     - JWT_SECRET_KEY=YourSuperSecretKeyOfAtLeast32CharactersLong
+   ```
 
-Copy the generated key into your `.env` file.
+If you provide the key this way, OpenShort will **always prioritize it** over the one stored in the local SQLite or MySQL database.
 
-
-## Domain Configuration
 
 To use OpenShort with your own domains, follow these steps:
 

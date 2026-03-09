@@ -7,13 +7,14 @@ services:
     container_name: openshort
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
       # --- MySQL Configuration (Uncomment to use MySQL) ---
       # - MYSQL_HOST=mysql
       # - MYSQL_PORT=3306
       # - MYSQL_DATABASE=openshort
       # - MYSQL_USER=openshort
       # - MYSQL_PASSWORD=openshort_password
+      # --- Security (Optional: Auto-generated if omitted) ---
+      # - JWT_SECRET_KEY=ChangeMeToASecureRandomKeyAtLeast32CharsLong
     ports:
       - "8081:8081" # Dashboard (Frontend)
       - "80:8080" # API and Redirects (Backend)

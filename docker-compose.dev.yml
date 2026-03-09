@@ -1,0 +1,11 @@
+services:
+  openshort:
+    # Rimuove l'ancoraggio all'immagine pubblica
+    image: openshort:dev
+    # Reintroduce la build locale per testare il codice sorgente
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      # Forza l'ambiente in Development per abilitare Swagger o log extra
+      - ASPNETCORE_ENVIRONMENT=Development

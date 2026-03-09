@@ -76,6 +76,63 @@ To remove volumes (⚠️⚠️⚠️ defaults to deleting SQLite data):
 docker compose down -v
 ```
 
+## Installation Options
+
+You can install OpenShort either by pulling the official Docker image or by using Docker Compose.
+
+### Option 1: Docker Run (Quickest)
+
+You can launch OpenShort instantly using the published image (`catokx/openshort:latest`) directly from the terminal. 
+
+#### A. Zero-Config Mode (SQLite)
+If you don't have an external database, simply use the embedded SQLite engine. **Note:** Mapping the `/app/data` volume is crucial to persist your links and settings across container restarts!
+
+```bash
+docker run -d \
+  --name openshort \
+  -p 8081:8081 \
+  -p 8080:8080 \
+  -v openshort-data:/app/data \
+  --restart unless-stopped \
+  catokx/openshort:latest
+```
+
+#### B. MySQL Mode
+If you already have a MySQL server running, you can connect OpenShort to it by passing the connection parameters. Since all data is stored externally, mapping a local volume is not strictly necessary.
+
+```bash
+docker run -d \
+  --name openshort \
+  -p 8081:8081 \
+  -p 8080:8080 \
+  -e MYSQL_HOST=your_mysql_host \
+  -e MYSQL_PORT=3306 \
+  -e MYSQL_DATABASE=openshort \
+  -e MYSQL_USER=root \
+  -e MYSQL_PASSWORD=your_secure_password \
+  --restart unless-stopped \
+  catokx/openshort:latest
+```
+
+### Option 2: Docker Compose
+
+For a more declarative setup, you can use the provided `docker-compose.yml` file.
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/emanueledeamicis/OpenShort.git
+   cd OpenShort
+   ```
+
+2. **Start the services**
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Access the application**
+   - Dashboard (Frontend): http://{{server-ip}}:8081
+   - API & Redirects (Backend): http://{{server-ip}} (default on port 80)
+
 ## Updating
 
 ### Updating from Source

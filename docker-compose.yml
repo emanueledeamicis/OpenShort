@@ -1,9 +1,6 @@
 services:
   openshort:
-    image: openshort:latest
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    image: catokx/openshort:latest
     container_name: openshort
     environment:
       - ASPNETCORE_ENVIRONMENT=Production

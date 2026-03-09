@@ -40,7 +40,7 @@ public class AuthController : ControllerBase
             }
 
             var roles = await _userManager.GetRolesAsync(user);
-            var token = _tokenService.CreateToken(user, roles);
+            var token = await _tokenService.CreateTokenAsync(user, roles);
 
             _logger.LogInformation("User logged in: {Email}", request.Email);
             return Ok(new AuthResponse
@@ -75,7 +75,7 @@ public class AuthController : ControllerBase
             }
 
             var roles = await _userManager.GetRolesAsync(user);
-            var token = _tokenService.CreateToken(user, roles);
+            var token = await _tokenService.CreateTokenAsync(user, roles);
 
             _logger.LogInformation("User registered: {Email}", request.Email);
             return Ok(new AuthResponse

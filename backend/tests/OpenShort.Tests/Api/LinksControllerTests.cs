@@ -77,7 +77,7 @@ public class LinksControllerTests
         
         link.Should().NotBeNull();
         link!.Slug.Should().Be("test-slug");
-        link.DestinationUrl.Should().Be("https://example.com");
+        link.DestinationUrl.Should().Be("https://example.com/");
 
         // Verify DB
         var dbLink = await _context.Links.FirstOrDefaultAsync(l => l.Slug == "test-slug");

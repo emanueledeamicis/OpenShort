@@ -14,6 +14,8 @@ services:
       # - MYSQL_DATABASE=openshort
       # - MYSQL_USER=openshort
       # - MYSQL_PASSWORD=openshort_password
+      # --- Security (Optional: Auto-generated if omitted) ---
+      # - JWT_SECRET_KEY=ChangeMeToASecureRandomKeyAtLeast32CharsLong
     ports:
       - "8081:8081" # Dashboard (Frontend)
       - "80:8080" # API and Redirects (Backend)

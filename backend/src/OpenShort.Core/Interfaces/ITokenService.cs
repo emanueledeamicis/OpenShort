@@ -4,5 +4,5 @@ namespace OpenShort.Core.Interfaces;
 
 public interface ITokenService
 {
-    string CreateToken(IdentityUser user, IList<string> roles);
+    Task<string> CreateTokenAsync(IdentityUser user, IList<string> roles);
 }

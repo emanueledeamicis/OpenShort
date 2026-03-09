@@ -7,7 +7,6 @@ services:
     container_name: openshort
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
       # --- MySQL Configuration (Uncomment to use MySQL) ---
       # - MYSQL_HOST=mysql
       # - MYSQL_PORT=3306

@@ -62,7 +62,7 @@ public class LinkService : ILinkService
             if (link != null && link.IsActive && (!link.ExpiresAt.HasValue || link.ExpiresAt >= DateTime.UtcNow))
             {
                 // 3. Save to cache if valid
-                var cacheDurationSeconds = await _settingService.GetSettingIntAsync("CacheDurationSeconds", 60);
+                var cacheDurationSeconds = await _settingService.GetSettingAsync("CacheDurationSeconds", 60);
                 if (cacheDurationSeconds > 0)
                 {
                     var cacheEntryOptions = new MemoryCacheEntryOptions()

@@ -4,27 +4,59 @@
       <div class="flex justify-center mb-2">
         <img src="/assets/logo-horizontal.png" alt="OpenShort Logo" class="h-10 w-auto" />
       </div>
-      <!-- Error Message -->
-      <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage"></p-message>
-
-      <div class="flex flex-col gap-2">
-        <label for="email" class="text-surface-900 dark:text-surface-0 font-medium">Email</label>
-        <input pInputText id="email" type="email" [(ngModel)]="email" class="w-full" placeholder="your@email.com"
-          [disabled]="loading" />
+      <div *ngIf="loadingStatus" class="text-center text-surface-600 dark:text-surface-300">
+        Loading...
       </div>
 
-      <div class="flex flex-col gap-2">
-        <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Password</label>
-        <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="******"
-          [disabled]="loading" (keyup.enter)="onLogin()" />
-      </div>
+      <ng-container *ngIf="!loadingStatus">
+        <!-- Error Message -->
+        <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage"></p-message>
 
-      <p-button label="Sign In" [loading]="loading" [disabled]="!email || !password" (onClick)="onLogin()"
-        styleClass="w-full" />
+        <ng-container *ngIf="isInitialSetupRequired; else loginForm">
+          <div class="text-center">
+            <h2 class="text-xl font-semibold text-surface-900 dark:text-surface-0">Initial Admin Setup</h2>
+            <p class="text-sm text-surface-600 dark:text-surface-400 mt-2">
+              Set the password for the default <strong>{{ setupUserName }}</strong> account.
+            </p>
+          </div>
 
-      <div class="text-center mt-2">
-        <span class="text-xs text-surface-500 dark:text-surface-400">v{{version}}</span>
-      </div>
+          <div class="flex flex-col gap-2">
+            <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Password</label>
+            <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="Choose a strong password"
+              [disabled]="loading" />
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="confirmPassword" class="text-surface-900 dark:text-surface-0 font-medium">Repeat password</label>
+            <input pInputText id="confirmPassword" type="password" [(ngModel)]="confirmPassword" class="w-full" placeholder="Repeat your password"
+              [disabled]="loading" (keyup.enter)="onSetupAdmin()" />
+          </div>
+
+          <p-button label="Complete Setup" [loading]="loading" [disabled]="!password || !confirmPassword" (onClick)="onSetupAdmin()"
+            styleClass="w-full" />
+        </ng-container>
+
+        <ng-template #loginForm>
+          <div class="flex flex-col gap-2">
+            <label for="identifier" class="text-surface-900 dark:text-surface-0 font-medium">Email or username</label>
+            <input pInputText id="identifier" type="text" [(ngModel)]="identifier" class="w-full" placeholder="admin"
+              [disabled]="loading" />
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Password</label>
+            <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="******"
+              [disabled]="loading" (keyup.enter)="onLogin()" />
+          </div>
+
+          <p-button label="Sign In" [loading]="loading" [disabled]="!identifier || !password" (onClick)="onLogin()"
+            styleClass="w-full" />
+        </ng-template>
+
+        <div class="text-center mt-2">
+          <span class="text-xs text-surface-500 dark:text-surface-400">v{{version}}</span>
+        </div>
+      </ng-container>
     </div>
   </p-card>
 </div>

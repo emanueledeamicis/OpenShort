@@ -67,6 +67,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>(); // Register Token Service
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>(); // Register ApiKey Service
 builder.Services.AddScoped<ISettingService, SettingService>();
+builder.Services.AddScoped<DatabaseInitializer>();
 
 // Register JWT Key Provider
 builder.Services.AddScoped<IJwtKeyProvider, JwtKeyProvider>();
@@ -213,24 +214,12 @@ app.UseAuthorization();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    var context = services.GetRequiredService<AppDbContext>();
-    var userManager = services.GetRequiredService<UserManager<Microsoft.AspNetCore.Identity.IdentityUser>>();
     var logger = services.GetRequiredService<ILogger<Program>>();
+    var initializer = services.GetRequiredService<DatabaseInitializer>();
     
     try
     {
-        // Auto-apply migrations
-        logger.LogInformation("Applying database migrations...");
-        await context.Database.MigrateAsync();
-        logger.LogInformation("Database migrations applied successfully.");
-
-        // Only seed if database is accessible and not already seeded
-        if (context.Database.CanConnect())
-        {
-            logger.LogInformation("Checking if initial data seeding is required...");
-            await DbSeeder.SeedAsync(context, userManager, services);
-            logger.LogInformation("Data seeding check completed.");
-        }
+        await initializer.InitializeAsync();
     }
     catch (Exception ex)
     {

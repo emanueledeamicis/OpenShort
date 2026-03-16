@@ -14,10 +14,10 @@ namespace OpenShort.Tests.Api;
 [TestFixture]
 public class DomainsControllerTests
 {
-    private AppDbContext _context;
-    private Mock<ILogger<DomainsController>> _mockLogger;
-    private DomainsController _controller;
-    private DomainService _domainService;
+    private AppDbContext _context = null!;
+    private Mock<ILogger<DomainsController>> _loggerMock = null!;
+    private DomainsController _controller = null!;
+    private DomainService _domainService = null!;
 
     [SetUp]
     public void Setup()
@@ -27,9 +27,9 @@ public class DomainsControllerTests
             .Options;
 
         _context = new AppDbContext(options);
-        _mockLogger = new Mock<ILogger<DomainsController>>();
+        _loggerMock = new Mock<ILogger<DomainsController>>();
         _domainService = new DomainService(_context);
-        _controller = new DomainsController(_domainService, _mockLogger.Object);
+        _controller = new DomainsController(_domainService, _loggerMock.Object);
     }
 
     [TearDown]

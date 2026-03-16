@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenShort.Core.Entities;
-using OpenShort.Infrastructure.Data;
 using OpenShort.Core.Interfaces;
 
 namespace OpenShort.Api.Controllers;
@@ -12,6 +10,16 @@ namespace OpenShort.Api.Controllers;
 [Authorize] // Require Authentication (JWT or ApiKey)
 public class LinksController : ControllerBase
 {
+    private const string LinkNotFoundMessage = "Link not found.";
+    private const string InvalidDestinationUrlMessage = "Invalid Destination URL format.";
+    private const string DisallowedUrlSchemeMessage = "URL scheme is not allowed.";
+    private const string DomainRequiredMessage = "Domain is required.";
+    private const string DomainNotAuthorizedMessageTemplate = "Domain '{0}' is not authorized.";
+    private const string DomainNotActiveMessageTemplate = "Domain '{0}' is not active.";
+    private const string SlugConflictMessage = "Slug already in use for this domain.";
+    private const string LinkUpdateConcurrencyMessage = "A concurrency error occurred. The record may have been modified or deleted by another user.";
+    private const string UnexpectedLinkUpdateErrorMessage = "An unexpected error occurred while updating the link.";
+
     private readonly ILinkService _linkService;
     private readonly IDomainService _domainService;
     private readonly ILogger<LinksController> _logger;
@@ -38,7 +46,7 @@ public class LinksController : ControllerBase
 
         if (link == null)
         {
-            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Link not found.");
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: LinkNotFoundMessage);
         }
 
         return link;
@@ -51,32 +59,33 @@ public class LinksController : ControllerBase
         // 1. URL Validation
         if (!Uri.TryCreate(dto.DestinationUrl, UriKind.Absolute, out var uriResult))
         {
-             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "Invalid Destination URL format.");
+             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: InvalidDestinationUrlMessage);
         }
 
         var scheme = uriResult.Scheme.ToLower();
         if (scheme == "javascript" || scheme == "vbscript" || scheme == "data")
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "URL scheme is not allowed.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: DisallowedUrlSchemeMessage);
         }
 
         // 2. Domain Validation
-        string targetDomainHost = dto.Domain;
-        if (string.IsNullOrWhiteSpace(targetDomainHost)) 
+        if (string.IsNullOrWhiteSpace(dto.Domain)) 
         {
-             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "Domain is required.");
+             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: DomainRequiredMessage);
         }
+
+        var targetDomainHost = dto.Domain.Trim().ToLowerInvariant();
 
         var authorizedDomain = await _domainService.GetByHostAsync(targetDomainHost);
 
         if (authorizedDomain == null)
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: $"Domain '{targetDomainHost}' is not authorized.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: string.Format(DomainNotAuthorizedMessageTemplate, targetDomainHost));
         }
 
         if (!authorizedDomain.IsActive)
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: $"Domain '{targetDomainHost}' is not active.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: string.Format(DomainNotActiveMessageTemplate, targetDomainHost));
         }
 
         // Format Destination URL
@@ -89,7 +98,7 @@ public class LinksController : ControllerBase
         var link = new Link
         {
             DestinationUrl = formattedDestinationUrl,
-            Slug = dto.Slug?.ToLowerInvariant(), // Service handles conflict if not null, or auto-gen if null
+            Slug = dto.Slug?.ToLowerInvariant() ?? string.Empty,
             Domain = targetDomainHost,
             Title = dto.Title,
             Notes = dto.Notes,
@@ -100,7 +109,7 @@ public class LinksController : ControllerBase
 
         if (createdLink == null)
         {
-             return Problem(statusCode: StatusCodes.Status409Conflict, detail: "Slug already in use for this domain.");
+             return Problem(statusCode: StatusCodes.Status409Conflict, detail: SlugConflictMessage);
         }
 
         return CreatedAtAction("GetLink", new { id = createdLink.Id }, createdLink);
@@ -114,19 +123,19 @@ public class LinksController : ControllerBase
         var existingLink = await _linkService.GetByIdAsync(id);
         if (existingLink == null)
         {
-            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Link not found.");
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: LinkNotFoundMessage);
         }
 
         // 2. URL Validation
         if (!Uri.TryCreate(dto.DestinationUrl, UriKind.Absolute, out var uriResult))
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "Invalid Destination URL format.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: InvalidDestinationUrlMessage);
         }
 
         var scheme = uriResult.Scheme.ToLower();
         if (scheme == "javascript" || scheme == "vbscript" || scheme == "data")
         {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: "URL scheme is not allowed.");
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: DisallowedUrlSchemeMessage);
         }
 
         // Format Destination URL
@@ -147,18 +156,18 @@ public class LinksController : ControllerBase
             var success = await _linkService.UpdateAsync(existingLink);
             if (!success)
             {
-                return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Link not found.");
+                return Problem(statusCode: StatusCodes.Status404NotFound, detail: LinkNotFoundMessage);
             }
         }
         catch (Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException ex)
         {
             _logger.LogError(ex, "Concurrency error while updating link {LinkId}", id);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "A concurrency error occurred. The record may have been modified or deleted by another user.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: LinkUpdateConcurrencyMessage);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error while updating link {LinkId}", id);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while updating the link.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedLinkUpdateErrorMessage);
         }
 
         return NoContent();
@@ -171,7 +180,7 @@ public class LinksController : ControllerBase
         var success = await _linkService.DeleteAsync(id);
         if (!success)
         {
-             return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Link not found.");
+             return Problem(statusCode: StatusCodes.Status404NotFound, detail: LinkNotFoundMessage);
         }
 
         return NoContent();

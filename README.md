@@ -59,11 +59,10 @@ A self-hosted URL shortener built with .NET 9 and Angular 21.
 
 ### First Login
 
-Default credentials (created by DbSeeder):
-- **Email**: `admin@openshort.local`
-- **Password**: `Admin123!`
+On the first startup, OpenShort creates the default administrator account:
+- **Username**: `admin`
 
-⚠️ **Change the password immediately after first login!**
+When you open the dashboard for the first time, you will be prompted to choose the admin password and confirm it. No default password is shipped with the application.
 
 ### Stopping the application
 
@@ -238,9 +237,19 @@ All Environment Variables can be configured directly inside the `environment:` s
 
 # Security
 - ASPNETCORE_ENVIRONMENT=Production
+- ADMIN_PASSWORD_RESET=temporary_emergency_password
 
 > **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (e.g. `Password$$` becomes `Password$$$$`) to prevent Docker from interpreting them as variables.
 ```
+
+### Admin Password Recovery
+
+If you lose the admin password in a self-hosted deployment, you can reset it at container startup with the optional `ADMIN_PASSWORD_RESET` environment variable.
+
+1. Add `ADMIN_PASSWORD_RESET=your_new_temporary_password` to the OpenShort container environment.
+2. Restart the container.
+3. Sign in with username `admin` and the new password.
+4. Remove the environment variable from your deployment after the reset is complete.
 
 ### JWT Secret Key
 
@@ -301,3 +310,4 @@ MIT License - see LICENSE file for details
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
+

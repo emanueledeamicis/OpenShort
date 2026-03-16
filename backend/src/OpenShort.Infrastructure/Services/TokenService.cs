@@ -25,11 +25,15 @@ public class TokenService : ITokenService
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id), // Standard Subject claim
-            new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()), // Unique Token ID
             new Claim(ClaimTypes.NameIdentifier, user.Id), // For ASP.NET Identity compatibility
             new Claim(ClaimTypes.Name, user.UserName ?? "")
         };
+
+        if (!string.IsNullOrWhiteSpace(user.Email))
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
+        }
 
         // Add Roles
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));

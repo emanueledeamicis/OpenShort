@@ -45,21 +45,15 @@ export class SecurityComponent implements OnInit {
 
     loadApiKeyInfo() {
         this.isLoadingApiKey = true;
-        console.log('[Security] Starting API key load...');
         this.securityService.getApiKeyInfo().subscribe({
             next: (info) => {
-                console.log('[Security] Received API key info:', info);
                 this.apiKeyInfo = info;
                 this.isLoadingApiKey = false;
                 this.cdr.detectChanges(); // Force UI update
             },
-            error: (err) => {
-                console.error('[Security] Error loading API key:', err);
+            error: () => {
                 this.isLoadingApiKey = false;
                 this.cdr.detectChanges(); // Force UI update
-            },
-            complete: () => {
-                console.log('[Security] Observable completed');
             }
         });
     }
@@ -79,7 +73,6 @@ export class SecurityComponent implements OnInit {
 
         this.securityService.generateApiKey().subscribe({
             next: (result) => {
-                console.log('[Security] Generated API key:', result);
                 this.generatedKey = result.key;
                 this.apiKeyInfo = {
                     exists: true,
@@ -89,8 +82,7 @@ export class SecurityComponent implements OnInit {
                 this.isGeneratingApiKey = false;
                 this.cdr.detectChanges(); // Force UI update
             },
-            error: (err) => {
-                console.error('[Security] Error generating API key:', err);
+            error: () => {
                 this.isGeneratingApiKey = false;
                 this.cdr.detectChanges(); // Force UI update
             }
@@ -138,10 +130,27 @@ export class SecurityComponent implements OnInit {
                 this.cdr.detectChanges(); // Force UI update
             },
             error: (err) => {
-                this.passwordError = err.error?.message || 'Error occurred while changing password.';
+                this.passwordError = this.extractApiErrorMessage(err, 'Error occurred while changing password.');
                 this.isChangingPassword = false;
                 this.cdr.detectChanges(); // Force UI update
             }
         });
+    }
+
+    private extractApiErrorMessage(err: any, fallbackMessage: string): string {
+        const apiError = err?.error;
+        const validationErrors = apiError?.errors;
+
+        if (validationErrors && typeof validationErrors === 'object') {
+            const messages = Object.values(validationErrors)
+                .flatMap((value) => Array.isArray(value) ? value : [value])
+                .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+            if (messages.length > 0) {
+                return messages.join(' ');
+            }
+        }
+
+        return apiError?.message || apiError?.detail || fallbackMessage;
     }
 }

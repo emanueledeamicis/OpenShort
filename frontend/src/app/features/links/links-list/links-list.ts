@@ -33,6 +33,14 @@ import { Link, Domain, RedirectType, UpdateLinkDto } from '../../../core/models/
     styleUrl: './links-list.css'
 })
 export class LinksListComponent implements OnInit, OnDestroy {
+    private static readonly loadLinksErrorMessage = 'Unable to load links.';
+    private static readonly loadDomainsErrorMessage = 'Unable to load domains.';
+    private static readonly createLinkErrorMessage = 'Failed to create link. Please try again.';
+    private static readonly updateLinkErrorMessage = 'Failed to update link. Please try again.';
+    private static readonly deleteLinkErrorMessage = 'Failed to delete link. Please try again.';
+    private static readonly toggleLinkErrorMessage = 'Failed to update link status. Please try again.';
+    private static readonly copyLinkErrorMessage = 'Unable to copy the short URL.';
+
     links: Link[] = [];
     domains: Domain[] = [];
     loading = false;
@@ -41,6 +49,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
     showDeleteConfirm = false;
     showToggleConfirm = false;
     saving = false;
+    pageErrorMessage = '';
     errorMessage = '';
     editErrorMessage = '';
     selectedLink: Link | null = null;
@@ -88,6 +97,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
 
     loadLinks() {
         this.loading = true;
+        this.pageErrorMessage = '';
         this.cdr.detectChanges();
 
         const sub = this.linkService.getAll().subscribe({
@@ -97,7 +107,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
                 this.cdr.detectChanges();
             },
             error: (err) => {
-                console.error('Error loading links:', err);
+                this.pageErrorMessage = this.extractApiErrorMessage(err, LinksListComponent.loadLinksErrorMessage);
                 this.loading = false;
                 this.cdr.detectChanges();
             }
@@ -113,7 +123,10 @@ export class LinksListComponent implements OnInit, OnDestroy {
                 this.domains = data.sort((a, b) => b.id - a.id);
                 this.cdr.detectChanges();
             },
-            error: (err) => console.error('Error loading domains:', err)
+            error: (err) => {
+                this.pageErrorMessage = this.extractApiErrorMessage(err, LinksListComponent.loadDomainsErrorMessage);
+                this.cdr.detectChanges();
+            }
         });
         this.subscription.add(sub);
     }
@@ -124,6 +137,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
         const defaultDomain = this.domains.length > 0 ? this.domains[0].host : '';
         this.linkForm.reset({ isActive: true, domain: defaultDomain });
         this.errorMessage = '';
+        this.pageErrorMessage = '';
         this.showDialog = true;
     }
 
@@ -167,9 +181,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
             },
             error: (err) => {
                 this.saving = false;
-                this.errorMessage = err.error?.detail || err.error?.title || 'Failed to create link. Please try again.';
+                this.errorMessage = this.extractApiErrorMessage(err, LinksListComponent.createLinkErrorMessage);
                 this.cdr.detectChanges();
-                console.error('Error creating link:', err);
             }
         });
         this.subscription.add(sub);
@@ -217,7 +230,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
             }
         } catch (e) { /* Let backend or regex catch invalid URLs */ }
 
-        const sub = this.linkService.update(this.selectedLink.id!, dto).subscribe({
+        const sub = this.linkService.update(this.selectedLink.id, dto).subscribe({
             next: () => {
                 this.saving = false;
                 this.closeEditDialog();
@@ -225,9 +238,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
             },
             error: (err) => {
                 this.saving = false;
-                this.editErrorMessage = err.error?.detail || err.error?.title || 'Failed to update link. Please try again.';
+                this.editErrorMessage = this.extractApiErrorMessage(err, LinksListComponent.updateLinkErrorMessage);
                 this.cdr.detectChanges();
-                console.error('Error updating link:', err);
             }
         });
         this.subscription.add(sub);
@@ -248,7 +260,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
         if (!this.selectedLink) return;
 
         this.saving = true;
-        const sub = this.linkService.delete(this.selectedLink.id!).subscribe({
+        const sub = this.linkService.delete(this.selectedLink.id).subscribe({
             next: () => {
                 this.saving = false;
                 this.closeDeleteConfirm();
@@ -256,7 +268,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
             },
             error: (err) => {
                 this.saving = false;
-                console.error('Error deleting link:', err);
+                this.pageErrorMessage = this.extractApiErrorMessage(err, LinksListComponent.deleteLinkErrorMessage);
+                this.cdr.detectChanges();
             }
         });
         this.subscription.add(sub);
@@ -285,7 +298,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
             isActive: !this.selectedLink.isActive
         };
 
-        const sub = this.linkService.update(this.selectedLink.id!, dto).subscribe({
+        const sub = this.linkService.update(this.selectedLink.id, dto).subscribe({
             next: () => {
                 this.saving = false;
                 this.closeToggleConfirm();
@@ -293,15 +306,34 @@ export class LinksListComponent implements OnInit, OnDestroy {
             },
             error: (err) => {
                 this.saving = false;
-                console.error('Error toggling link status:', err);
+                this.pageErrorMessage = this.extractApiErrorMessage(err, LinksListComponent.toggleLinkErrorMessage);
+                this.cdr.detectChanges();
             }
         });
         this.subscription.add(sub);
     }
 
     copyToClipboard(url: string) {
-        navigator.clipboard.writeText(url).catch(err => {
-            console.error('Failed to copy to clipboard', err);
+        navigator.clipboard.writeText(url).catch(() => {
+            this.pageErrorMessage = LinksListComponent.copyLinkErrorMessage;
+            this.cdr.detectChanges();
         });
+    }
+
+    private extractApiErrorMessage(err: any, fallbackMessage: string): string {
+        const apiError = err?.error;
+        const validationErrors = apiError?.errors;
+
+        if (validationErrors && typeof validationErrors === 'object') {
+            const messages = Object.values(validationErrors)
+                .flatMap((value) => Array.isArray(value) ? value : [value])
+                .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+            if (messages.length > 0) {
+                return messages.join(' ');
+            }
+        }
+
+        return apiError?.message || apiError?.detail || apiError?.title || fallbackMessage;
     }
 }

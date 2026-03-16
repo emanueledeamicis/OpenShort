@@ -23,10 +23,6 @@ export class DomainService {
         return this.http.post<Domain>(this.apiUrl, dto);
     }
 
-    update(id: number, dto: Partial<Domain>): Observable<Domain> {
-        return this.http.put<Domain>(`${this.apiUrl}/${id}`, dto);
-    }
-
     delete(id: number): Observable<void> {
         return this.http.delete<void>(`${this.apiUrl}/${id}`);
     }

@@ -10,6 +10,13 @@ namespace OpenShort.Infrastructure.Services;
 
 public class LinkService : ILinkService
 {
+    private const string RedirectCacheKeyPrefix = "redirect";
+    private const string CacheDurationSecondsSettingKey = "CacheDurationSeconds";
+    private const string ClickEventChannelFullMessage = "Failed to enqueue click event for {Domain}/{Slug}. Channel might be full.";
+    private const string MySqlDuplicateEntryMessage = "Duplicate entry";
+    private const string SqliteUniqueConstraintMessage = "UNIQUE constraint";
+    private const string LinkCreationCollisionFailureMessage = "Failed to create link after {0} attempts due to slug collisions.";
+
     private readonly AppDbContext _context;
     private readonly ISlugGenerator _slugGenerator;
     private readonly IMemoryCache _cache;
@@ -50,7 +57,7 @@ public class LinkService : ILinkService
 
     public async Task<Link?> ResolveAndTrackRedirectAsync(string domain, string slug)
     {
-        var cacheKey = $"redirect_{domain}_{slug}";
+        var cacheKey = BuildRedirectCacheKey(domain, slug);
 
         // 1. Try get from cache
         if (!_cache.TryGetValue(cacheKey, out Link? link))
@@ -62,7 +69,7 @@ public class LinkService : ILinkService
             if (link != null && link.IsActive && (!link.ExpiresAt.HasValue || link.ExpiresAt >= DateTime.UtcNow))
             {
                 // 3. Save to cache if valid
-                var cacheDurationSeconds = await _settingService.GetSettingIntAsync("CacheDurationSeconds", 60);
+                var cacheDurationSeconds = await _settingService.GetSettingAsync(CacheDurationSecondsSettingKey, 60);
                 if (cacheDurationSeconds > 0)
                 {
                     var cacheEntryOptions = new MemoryCacheEntryOptions()
@@ -85,7 +92,7 @@ public class LinkService : ILinkService
             
             if (!_clickChannel.TryWrite(clickEvent))
             {
-                _logger.LogWarning("Failed to enqueue click event for {Domain}/{Slug}. Channel might be full.", domain, slug);
+                _logger.LogWarning(ClickEventChannelFullMessage, domain, slug);
             }
         }
 
@@ -111,7 +118,6 @@ public class LinkService : ILinkService
         }
 
         link.CreatedAt = DateTime.UtcNow;
-        // IsActive is set by the controller from the DTO
 
         // Retry loop for auto-generated slug collisions
         for (int attempt = 0; attempt < maxRetries; attempt++)
@@ -133,14 +139,14 @@ public class LinkService : ILinkService
         }
 
         // Max retries exceeded
-        throw new InvalidOperationException($"Failed to create link after {maxRetries} attempts due to slug collisions.");
+        throw new InvalidOperationException(string.Format(LinkCreationCollisionFailureMessage, maxRetries));
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException ex)
     {
         // MySQL unique constraint violation code
-        return ex.InnerException?.Message.Contains("Duplicate entry") == true ||
-               ex.InnerException?.Message.Contains("UNIQUE constraint") == true;
+        return ex.InnerException?.Message.Contains(MySqlDuplicateEntryMessage) == true ||
+               ex.InnerException?.Message.Contains(SqliteUniqueConstraintMessage) == true;
     }
 
 
@@ -152,7 +158,7 @@ public class LinkService : ILinkService
             await _context.SaveChangesAsync();
             
             // Invalidate cache
-            _cache.Remove($"redirect_{link.Domain}_{link.Slug}");
+            _cache.Remove(BuildRedirectCacheKey(link.Domain, link.Slug));
             
             return true;
         }
@@ -178,7 +184,7 @@ public class LinkService : ILinkService
         await _context.SaveChangesAsync();
         
         // Invalidate cache
-        _cache.Remove($"redirect_{link.Domain}_{link.Slug}");
+        _cache.Remove(BuildRedirectCacheKey(link.Domain, link.Slug));
         
         return true;
     }
@@ -187,4 +193,6 @@ public class LinkService : ILinkService
     {
         return await _context.Links.AnyAsync(e => e.Id == id);
     }
+
+    private static string BuildRedirectCacheKey(string domain, string slug) => $"{RedirectCacheKeyPrefix}_{domain}_{slug}";
 }

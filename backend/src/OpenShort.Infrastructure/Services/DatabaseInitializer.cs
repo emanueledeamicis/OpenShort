@@ -13,8 +13,11 @@ public class DatabaseInitializer
     public const string AdminUserName = "admin";
     public const string AdminRoleName = "Admin";
     public const string InitialAdminSetupRequiredKey = "InitialAdminSetupRequired";
+    public const string CacheDurationSecondsKey = "CacheDurationSeconds";
     private const string DefaultDomain = "localhost";
+    private const string DefaultCacheDurationSecondsValue = "600";
     private const string InitialAdminSetupDescription = "Indicates whether the initial admin password setup flow is still required.";
+    private const string CacheDurationSecondsDescription = "Duration in seconds for which redirects are cached in memory.";
     private const string AdminPasswordResetEnvironmentVariable = "ADMIN_PASSWORD_RESET";
     private const string ApplyingMigrationsMessage = "Applying database migrations...";
     private const string MigrationsAppliedMessage = "Database migrations applied successfully.";
@@ -68,6 +71,7 @@ public class DatabaseInitializer
         await _context.Database.EnsureCreatedAsync();
         await EnsureJwtKeyAsync();
         await EnsureDefaultDomainAsync();
+        await EnsureDefaultSettingsAsync();
         await EnsureAdminRoleAsync();
         await EnsureAdminUserAsync();
     }
@@ -97,6 +101,17 @@ public class DatabaseInitializer
             IsActive = true
         });
         await _context.SaveChangesAsync();
+    }
+
+    private async Task EnsureDefaultSettingsAsync()
+    {
+        if (await _settingService.GetSettingAsync(CacheDurationSecondsKey) == null)
+        {
+            await _settingService.SetSettingAsync(
+                CacheDurationSecondsKey,
+                DefaultCacheDurationSecondsValue,
+                CacheDurationSecondsDescription);
+        }
     }
 
     private async Task EnsureAdminUserAsync()

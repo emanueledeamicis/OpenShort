@@ -1,13 +1,15 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CardModule } from 'primeng/card';
+import { MessageModule } from 'primeng/message';
+import { catchError, forkJoin, of } from 'rxjs';
 import { LinkService } from '../../../core/services/link.service';
 import { DomainService } from '../../../core/services/domain.service';
 
 @Component({
    selector: 'app-dashboard',
    standalone: true,
-   imports: [CommonModule, CardModule],
+   imports: [CommonModule, CardModule, MessageModule],
    template: `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
        <!-- Welcome Card -->
@@ -16,6 +18,10 @@ import { DomainService } from '../../../core/services/domain.service';
             <h1 class="text-2xl font-bold text-surface-900 dark:text-surface-0 mb-2">Welcome Back!</h1>
             <p class="text-surface-600 dark:text-surface-400">Here's what's happening with your short links today.</p>
          </div>
+       </div>
+
+       <div class="col-span-full" *ngIf="loadError">
+         <p-message severity="warn" [text]="loadError"></p-message>
        </div>
 
        <!-- Total Links -->
@@ -44,6 +50,7 @@ export class DashboardComponent implements OnInit {
    totalLinks = 0;
    activeDomains = 0;
    loading = true;
+   loadError = '';
 
    constructor(
       private linkService: LinkService,
@@ -57,23 +64,25 @@ export class DashboardComponent implements OnInit {
 
    loadStats() {
       this.loading = true;
+      this.loadError = '';
 
-      this.linkService.getAll().subscribe({
-         next: (links) => {
+      forkJoin({
+         links: this.linkService.getAll().pipe(
+            catchError(() => {
+               this.loadError = 'Some dashboard data could not be loaded.';
+               return of([]);
+            })
+         ),
+         domains: this.domainService.getAll().pipe(
+            catchError(() => {
+               this.loadError = 'Some dashboard data could not be loaded.';
+               return of([]);
+            })
+         )
+      }).subscribe({
+         next: ({ links, domains }) => {
             this.totalLinks = links.length;
-            this.cdr.detectChanges();
-         },
-         error: (err) => console.error('Error loading links:', err)
-      });
-
-      this.domainService.getAll().subscribe({
-         next: (domains) => {
             this.activeDomains = domains.filter(d => d.isActive).length;
-            this.loading = false;
-            this.cdr.detectChanges();
-         },
-         error: (err) => {
-            console.error('Error loading domains:', err);
             this.loading = false;
             this.cdr.detectChanges();
          }

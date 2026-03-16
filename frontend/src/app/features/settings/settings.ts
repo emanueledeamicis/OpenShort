@@ -21,6 +21,9 @@ import { SettingsService } from '../../core/services/settings.service';
   styleUrl: './settings.css',
 })
 export class Settings implements OnInit, OnDestroy {
+  private static readonly loadSettingsErrorMessage = 'Unable to load settings. Using default values.';
+  private static readonly saveSettingsErrorMessage = 'Failed to save settings.';
+
   settingsForm: FormGroup;
   loading = false;
   saving = false;
@@ -59,11 +62,11 @@ export class Settings implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('Error loading setting:', err);
         // Default to 600 if not found
         this.settingsForm.patchValue({
           cacheDuration: '600'
         });
+        this.errorMessage = this.extractApiErrorMessage(err, Settings.loadSettingsErrorMessage);
         this.loading = false;
         this.cdr.detectChanges();
       }
@@ -104,12 +107,28 @@ export class Settings implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.saving = false;
-        this.errorMessage = err.error?.detail || err.error?.title || 'Failed to save settings.';
-        console.error('Error saving settings:', err);
+        this.errorMessage = this.extractApiErrorMessage(err, Settings.saveSettingsErrorMessage);
         this.cdr.detectChanges();
       }
     });
 
     this.subscription.add(sub);
+  }
+
+  private extractApiErrorMessage(err: any, fallbackMessage: string): string {
+    const apiError = err?.error;
+    const validationErrors = apiError?.errors;
+
+    if (validationErrors && typeof validationErrors === 'object') {
+      const messages = Object.values(validationErrors)
+        .flatMap((value) => Array.isArray(value) ? value : [value])
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+      if (messages.length > 0) {
+        return messages.join(' ');
+      }
+    }
+
+    return apiError?.message || apiError?.detail || apiError?.title || fallbackMessage;
   }
 }

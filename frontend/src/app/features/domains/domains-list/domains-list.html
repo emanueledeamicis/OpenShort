@@ -4,6 +4,8 @@
         <p-button label="Add Domain" icon="pi pi-plus" severity="secondary" (onClick)="openCreateDialog()" />
     </div>
 
+    <p-message *ngIf="pageErrorMessage" severity="error" [text]="pageErrorMessage" styleClass="mb-4"></p-message>
+
     <div
         class="card bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden">
         <p-table [value]="domains" [loading]="loading" [tableStyle]="{ 'min-width': '50rem' }">

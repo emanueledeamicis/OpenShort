@@ -18,12 +18,12 @@ export interface InitialSetupStatus {
 })
 export class AuthService {
     private apiUrl = '/api/auth';
+    private tokenStorageKey = 'auth_token';
     private isAuthenticatedSubject: BehaviorSubject<boolean>;
     public redirectUrl: string | null = null;
 
     constructor(private http: HttpClient) {
-        // Initialize based on token existence
-        const hasToken = !!localStorage.getItem('auth_token');
+        const hasToken = !!this.getToken();
         this.isAuthenticatedSubject = new BehaviorSubject<boolean>(hasToken);
     }
 
@@ -44,24 +44,57 @@ export class AuthService {
     }
 
     logout(): void {
-        localStorage.removeItem('auth_token');
+        localStorage.removeItem(this.tokenStorageKey);
         this.isAuthenticatedSubject.next(false);
-        // Optional: Call backend to revoke if needed, but JWT is stateless usually
-        // this.http.post(`${this.apiUrl}/logout`, {}).subscribe(); 
     }
 
     isAuthenticated(): boolean {
-        return this.isAuthenticatedSubject.value;
+        return !!this.getToken();
     }
 
     isAuthenticated$(): Observable<boolean> {
         return this.isAuthenticatedSubject.asObservable();
     }
 
+    getToken(): string | null {
+        const token = localStorage.getItem(this.tokenStorageKey);
+        if (!token) {
+            return null;
+        }
+
+        if (!this.isTokenValid(token)) {
+            this.logout();
+            return null;
+        }
+
+        return token;
+    }
+
     private handleAuthSuccess(response: AuthResponse): void {
         if (response?.token) {
-            localStorage.setItem('auth_token', response.token);
+            localStorage.setItem(this.tokenStorageKey, response.token);
             this.isAuthenticatedSubject.next(true);
+        }
+    }
+
+    private isTokenValid(token: string): boolean {
+        try {
+            const payloadBase64 = token.split('.')[1];
+            if (!payloadBase64) {
+                return false;
+            }
+
+            const normalizedPayload = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+            const payloadJson = atob(normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '='));
+            const payload = JSON.parse(payloadJson) as { exp?: number };
+
+            if (typeof payload.exp !== 'number') {
+                return false;
+            }
+
+            return payload.exp * 1000 > Date.now();
+        } catch {
+            return false;
         }
     }
 }

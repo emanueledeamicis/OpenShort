@@ -1,5 +1,5 @@
 export interface Link {
-    id?: number;
+    id: number;
     slug: string;
     destinationUrl: string;
     domain: string;
@@ -7,8 +7,9 @@ export interface Link {
     notes?: string;
     isActive: boolean;
     redirectType: RedirectType;
-    createdAt?: Date;
-    visits?: number;
+    createdAt?: string;
+    clickCount: number;
+    lastAccessedAt?: string | null;
 }
 
 export enum RedirectType {

@@ -66,7 +66,6 @@ export class LoginComponent implements OnInit {
         this.loading = false;
         this.errorMessage = this.extractApiErrorMessage(err, 'Login failed. Please check your credentials.');
         this.cdr.detectChanges();
-        console.error('Login error:', err);
       }
     });
   }
@@ -91,7 +90,6 @@ export class LoginComponent implements OnInit {
         this.loading = false;
         this.errorMessage = this.extractApiErrorMessage(err, 'Unable to complete the initial admin setup.');
         this.cdr.detectChanges();
-        console.error('Initial setup error:', err);
       }
     });
   }

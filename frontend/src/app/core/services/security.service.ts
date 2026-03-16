@@ -5,13 +5,13 @@ import { Observable } from 'rxjs';
 export interface ApiKeyInfo {
     exists: boolean;
     prefix: string | null;
-    createdAt: Date | null;
+    createdAt: string | null;
 }
 
 export interface ApiKeyGenerated {
     key: string;
     prefix: string;
-    createdAt: Date;
+    createdAt: string;
 }
 
 export interface ChangePasswordRequest {

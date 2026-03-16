@@ -9,6 +9,9 @@ namespace OpenShort.Api.Controllers;
 [Authorize] // Only authenticated users can manage settings
 public class SettingsController : ControllerBase
 {
+    private const string SettingNotFoundMessage = "Setting not found.";
+    private const string KeyAndValueRequiredMessage = "Key and Value are required.";
+
     private readonly ISettingService _settingService;
 
     public SettingsController(ISettingService settingService)
@@ -27,7 +30,11 @@ public class SettingsController : ControllerBase
     public async Task<IActionResult> GetSetting(string key)
     {
         var value = await _settingService.GetSettingAsync(key);
-        if (value == null) return NotFound();
+        if (value == null)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: SettingNotFoundMessage);
+        }
+
         return Ok(new { Key = key, Value = value });
     }
 
@@ -36,7 +43,7 @@ public class SettingsController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.Key) || request.Value == null)
         {
-            return BadRequest("Key and Value are required.");
+            return BadRequest(KeyAndValueRequiredMessage);
         }
 
         await _settingService.SetSettingAsync(request.Key, request.Value, request.Description);

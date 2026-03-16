@@ -1,16 +1,25 @@
+using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using OpenShort.Core.Interfaces;
+using OpenShort.Infrastructure.Services;
 
 namespace OpenShort.Api.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-[Authorize] // Admin check relaxed for MVP uniformity
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = DatabaseInitializer.AdminRoleName)]
 public class UsersController : ControllerBase
 {
+    private const string UserNotFoundErrorCode = "NotFound";
+    private const string UserNotFoundMessage = "User not found.";
+    private const string CurrentUserDeletionForbiddenMessage = "You cannot delete the currently signed-in user.";
+    private const string UnexpectedUserCreateErrorMessage = "An unexpected error occurred while creating the user.";
+    private const string UnexpectedUserDeleteErrorMessage = "An unexpected error occurred while deleting the user.";
+
     private readonly IUserService _userService;
     private readonly ILogger<UsersController> _logger;
 
@@ -24,8 +33,6 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<IEnumerable<dynamic>>> GetUsers()
     {
         var users = await _userService.GetAllAsync();
-        // Be careful not to expose PasswordHash etc in production, but for MVP/Admin it's okay-ish or map to DTO.
-        // For security, let's map to a simple DTO to be safe.
         var userDtos = users.Select(u => new 
         {
             u.Id,
@@ -38,15 +45,15 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<IdentityUser>> CreateUser(string email, string password)
+    public async Task<ActionResult<IdentityUser>> CreateUser([FromBody] CreateUserRequest request)
     {
         try
         {
-            var (user, errors) = await _userService.CreateAsync(email, password);
+            var (user, errors) = await _userService.CreateAsync(request.Email, request.Password);
 
             if (user != null)
             {
-                _logger.LogInformation("User created: {Email}", email);
+                _logger.LogInformation("User created: {Email}", request.Email);
                 return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, new { user.Id, user.UserName, user.Email });
             }
 
@@ -58,8 +65,8 @@ public class UsersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating user {Email}", email);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while creating the user.");
+            _logger.LogError(ex, "Error creating user {Email}", request.Email);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedUserCreateErrorMessage);
         }
     }
 
@@ -68,6 +75,12 @@ public class UsersController : ControllerBase
     {
         try
         {
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.Equals(currentUserId, id, StringComparison.Ordinal))
+            {
+                return Problem(statusCode: StatusCodes.Status400BadRequest, detail: CurrentUserDeletionForbiddenMessage);
+            }
+
             var (success, errors) = await _userService.DeleteAsync(id);
 
             if (success)
@@ -76,10 +89,9 @@ public class UsersController : ControllerBase
                 return NoContent();
             }
 
-            // Check for Not Found
-            if (errors.Any(e => e.Code == "NotFound"))
+            if (errors.Any(e => e.Code == UserNotFoundErrorCode))
             {
-                return Problem(statusCode: StatusCodes.Status404NotFound, detail: "User not found.");
+                return Problem(statusCode: StatusCodes.Status404NotFound, detail: UserNotFoundMessage);
             }
 
             foreach (var error in errors)
@@ -91,7 +103,17 @@ public class UsersController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting user {UserId}", id);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while deleting the user.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedUserDeleteErrorMessage);
         }
     }
+}
+
+public class CreateUserRequest
+{
+    [Required]
+    [EmailAddress]
+    public string Email { get; set; } = string.Empty;
+
+    [Required]
+    public string Password { get; set; } = string.Empty;
 }

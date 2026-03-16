@@ -64,7 +64,7 @@ export class LoginComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.errorMessage = 'Login failed. Please check your credentials.';
+        this.errorMessage = this.extractApiErrorMessage(err, 'Login failed. Please check your credentials.');
         this.cdr.detectChanges();
         console.error('Login error:', err);
       }
@@ -89,10 +89,27 @@ export class LoginComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.errorMessage = err.error?.message || err.error?.detail || 'Unable to complete the initial admin setup.';
+        this.errorMessage = this.extractApiErrorMessage(err, 'Unable to complete the initial admin setup.');
         this.cdr.detectChanges();
         console.error('Initial setup error:', err);
       }
     });
+  }
+
+  private extractApiErrorMessage(err: any, fallbackMessage: string): string {
+    const apiError = err?.error;
+    const validationErrors = apiError?.errors;
+
+    if (validationErrors && typeof validationErrors === 'object') {
+      const messages = Object.values(validationErrors)
+        .flatMap((value) => Array.isArray(value) ? value : [value])
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+      if (messages.length > 0) {
+        return messages.join(' ');
+      }
+    }
+
+    return apiError?.message || apiError?.detail || fallbackMessage;
   }
 }

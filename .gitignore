@@ -13,3 +13,4 @@ notes.md
 .agent
 openshort.db*
 .agents
+.dotnet/

@@ -6,6 +6,9 @@ namespace OpenShort.Infrastructure.Services;
 
 public class UserService : IUserService
 {
+    private const string UserNotFoundErrorCode = "NotFound";
+    private const string UserNotFoundErrorDescription = "User not found.";
+
     private readonly UserManager<IdentityUser> _userManager;
 
     public UserService(UserManager<IdentityUser> userManager)
@@ -41,14 +44,14 @@ public class UserService : IUserService
         var user = await _userManager.FindByIdAsync(id);
         if (user == null)
         {
-            // If user not found, technically "Success" depends on semantics. 
-            // Controller returned NotFound. 
-            // Service should probably indicate "Not Found".
-            // My return signature `(bool Success, IEnumerable<IdentityError> Errors)` doesn't distinguish NotFound from Error easily 
-            // without errors logic.
-            // Let's assume Success=false and Empty Errors implies Not Found? Or specific error?
-            // "User not found" is reasonable.
-            return (false, new [] { new IdentityError { Code = "NotFound", Description = "User not found." } });
+            return (false, new []
+            {
+                new IdentityError
+                {
+                    Code = UserNotFoundErrorCode,
+                    Description = UserNotFoundErrorDescription
+                }
+            });
         }
 
         var result = await _userManager.DeleteAsync(user);

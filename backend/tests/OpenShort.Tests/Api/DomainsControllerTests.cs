@@ -15,7 +15,6 @@ namespace OpenShort.Tests.Api;
 public class DomainsControllerTests
 {
     private AppDbContext _context;
-    private Mock<ILogger<DomainsController>> _mockLogger;
     private DomainsController _controller;
     private DomainService _domainService;
 
@@ -27,9 +26,8 @@ public class DomainsControllerTests
             .Options;
 
         _context = new AppDbContext(options);
-        _mockLogger = new Mock<ILogger<DomainsController>>();
         _domainService = new DomainService(_context);
-        _controller = new DomainsController(_domainService, _mockLogger.Object);
+        _controller = new DomainsController(_domainService);
     }
 
     [TearDown]

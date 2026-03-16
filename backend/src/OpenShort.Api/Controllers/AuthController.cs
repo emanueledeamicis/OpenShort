@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using OpenShort.Api.Models;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
@@ -10,6 +12,16 @@ namespace OpenShort.Api.Controllers;
 [ApiController]
 public class AuthController : ControllerBase
 {
+    private const string InvalidCredentialsMessage = "Invalid username/email or password";
+    private const string PasswordConfirmationMismatchMessage = "Password and confirmation do not match.";
+    private const string InitialAdminSetupCompletedMessage = "Initial admin setup has already been completed.";
+    private const string AdminUserUnavailableMessage = "Admin user is not available.";
+    private const string AdminPasswordAlreadyConfiguredMessage = "Admin password has already been configured.";
+    private const string InitialAdminSetupDescription = "Indicates whether the initial admin password setup flow is still required.";
+    private const string UnexpectedLoginErrorMessage = "An unexpected error occurred during login.";
+    private const string UnexpectedAdminSetupErrorMessage = "An unexpected error occurred during admin setup.";
+    private const string UnexpectedRegistrationErrorMessage = "An unexpected error occurred during registration.";
+
     private readonly UserManager<IdentityUser> _userManager;
     private readonly ITokenService _tokenService;
     private readonly ISettingService _settingService;
@@ -49,14 +61,14 @@ public class AuthController : ControllerBase
             if (user == null)
             {
                 _logger.LogWarning("Login attempt failed: User not found {Identifier}", request.Identifier);
-                return Unauthorized("Invalid username/email or password");
+                return Unauthorized(InvalidCredentialsMessage);
             }
 
             var result = await _userManager.CheckPasswordAsync(user, request.Password);
             if (!result)
             {
                  _logger.LogWarning("Login attempt failed: Invalid password {Identifier}", request.Identifier);
-                return Unauthorized("Invalid username/email or password");
+                return Unauthorized(InvalidCredentialsMessage);
             }
 
             var roles = await _userManager.GetRolesAsync(user);
@@ -73,7 +85,7 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during login for {Identifier}", request.Identifier);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred during login.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedLoginErrorMessage);
         }
     }
 
@@ -82,13 +94,13 @@ public class AuthController : ControllerBase
     {
         if (request.Password != request.ConfirmPassword)
         {
-            return BadRequest(new { message = "Password and confirmation do not match." });
+            return BadRequest(new { message = PasswordConfirmationMismatchMessage });
         }
 
         var isSetupRequired = await _settingService.GetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, true);
         if (!isSetupRequired)
         {
-            return Conflict(new { message = "Initial admin setup has already been completed." });
+            return Conflict(new { message = InitialAdminSetupCompletedMessage });
         }
 
         try
@@ -96,12 +108,12 @@ public class AuthController : ControllerBase
             var adminUser = await _userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
             if (adminUser == null)
             {
-                return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "Admin user is not available.");
+                return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: AdminUserUnavailableMessage);
             }
 
             if (await _userManager.HasPasswordAsync(adminUser))
             {
-                return Conflict(new { message = "Admin password has already been configured." });
+                return Conflict(new { message = AdminPasswordAlreadyConfiguredMessage });
             }
 
             var addPasswordResult = await _userManager.AddPasswordAsync(adminUser, request.Password);
@@ -118,7 +130,7 @@ public class AuthController : ControllerBase
             await _settingService.SetSettingAsync(
                 DatabaseInitializer.InitialAdminSetupRequiredKey,
                 bool.FalseString.ToLowerInvariant(),
-                "Indicates whether the initial admin password setup flow is still required.");
+                InitialAdminSetupDescription);
 
             var roles = await _userManager.GetRolesAsync(adminUser);
             var token = await _tokenService.CreateTokenAsync(adminUser, roles);
@@ -134,11 +146,12 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during initial admin setup.");
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred during admin setup.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedAdminSetupErrorMessage);
         }
     }
 
     [HttpPost("register")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = DatabaseInitializer.AdminRoleName)]
     public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
     {
         try
@@ -170,7 +183,7 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred during registration.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedRegistrationErrorMessage);
         }
     }
 }

@@ -11,6 +11,13 @@ namespace OpenShort.Api.Controllers;
 [Authorize]
 public class SecurityController : ControllerBase
 {
+    private const string PasswordMismatchErrorCode = "PasswordMismatch";
+    private const string PasswordConfirmationMismatchMessage = "New password and confirmation do not match.";
+    private const string UserNotFoundMessage = "User not found.";
+    private const string IncorrectCurrentPasswordMessage = "Incorrect current password.";
+    private const string PasswordChangedSuccessMessage = "Password changed successfully.";
+    private const string UnexpectedPasswordChangeErrorMessage = "An unexpected error occurred while changing the password.";
+
     private readonly UserManager<IdentityUser> _userManager;
     private readonly IApiKeyService _apiKeyService;
     private readonly ILogger<SecurityController> _logger;
@@ -74,7 +81,7 @@ public class SecurityController : ControllerBase
     {
         if (request.NewPassword != request.ConfirmPassword)
         {
-            return BadRequest(new { message = "New password and confirmation do not match." });
+            return BadRequest(new { message = PasswordConfirmationMismatchMessage });
         }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -88,25 +95,26 @@ public class SecurityController : ControllerBase
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null)
             {
-                return NotFound(new { message = "User not found." });
+                return NotFound(new { message = UserNotFoundMessage });
             }
 
             var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
             
             if (!result.Succeeded)
             {
-                var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                var errors = string.Join(", ", result.Errors.Select(error =>
+                    error.Code == PasswordMismatchErrorCode ? IncorrectCurrentPasswordMessage : error.Description));
                 _logger.LogWarning("Password change failed for user {UserId}: {Errors}", userId, errors);
                 return BadRequest(new { message = errors });
             }
 
             _logger.LogInformation("Password changed successfully for user {UserId}", userId);
-            return Ok(new { message = "Password changed successfully." });
+            return Ok(new { message = PasswordChangedSuccessMessage });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during password change for user {UserId}", userId);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An unexpected error occurred while changing the password.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedPasswordChangeErrorMessage);
         }
     }
 }

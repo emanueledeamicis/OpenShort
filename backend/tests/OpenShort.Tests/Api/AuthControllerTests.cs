@@ -1,11 +1,14 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
 using Moq;
 using OpenShort.Api.Controllers;
 using OpenShort.Api.Models;
 using OpenShort.Core.Interfaces;
+using OpenShort.Infrastructure.Services;
 
 namespace OpenShort.Tests.Api;
 
@@ -103,5 +106,18 @@ public class AuthControllerTests
                 "false",
                 It.IsAny<string>()),
             Times.Once);
+    }
+
+    [Test]
+    public void Register_ShouldRequireAdminJwtAuthentication()
+    {
+        var method = typeof(AuthController).GetMethod(nameof(AuthController.Register));
+
+        var attribute = method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
+            .Cast<AuthorizeAttribute>()
+            .Single();
+
+        attribute.AuthenticationSchemes.Should().Be(JwtBearerDefaults.AuthenticationScheme);
+        attribute.Roles.Should().Be(DatabaseInitializer.AdminRoleName);
     }
 }

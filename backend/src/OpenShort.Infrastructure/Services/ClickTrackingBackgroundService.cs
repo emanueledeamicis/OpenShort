@@ -10,6 +10,12 @@ namespace OpenShort.Infrastructure.Services;
 
 public class ClickTrackingBackgroundService : BackgroundService
 {
+    private const string ServiceStartingMessage = "ClickTrackingBackgroundService is starting.";
+    private const string ClickProcessingErrorMessage = "Error occurred while processing click event for {Domain}/{Slug}";
+    private const string ServiceCancelledMessage = "ClickTrackingBackgroundService processing was cancelled.";
+    private const string ServiceCriticalErrorMessage = "A critical error occurred in ClickTrackingBackgroundService.";
+    private const string ServiceStoppingMessage = "ClickTrackingBackgroundService is stopping.";
+
     private readonly ChannelReader<ClickEvent> _channelReader;
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ClickTrackingBackgroundService> _logger;
@@ -26,7 +32,7 @@ public class ClickTrackingBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("ClickTrackingBackgroundService is starting.");
+        _logger.LogInformation(ServiceStartingMessage);
 
         try
         {
@@ -50,19 +56,19 @@ public class ClickTrackingBackgroundService : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error occurred while processing click event for {Domain}/{Slug}", clickEvent.Domain, clickEvent.Slug);
+                    _logger.LogError(ex, ClickProcessingErrorMessage, clickEvent.Domain, clickEvent.Slug);
                 }
             }
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("ClickTrackingBackgroundService processing was cancelled.");
+            _logger.LogInformation(ServiceCancelledMessage);
         }
         catch (Exception ex)
         {
-            _logger.LogCritical(ex, "A critical error occurred in ClickTrackingBackgroundService.");
+            _logger.LogCritical(ex, ServiceCriticalErrorMessage);
         }
 
-        _logger.LogInformation("ClickTrackingBackgroundService is stopping.");
+        _logger.LogInformation(ServiceStoppingMessage);
     }
 }

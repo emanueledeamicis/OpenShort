@@ -14,11 +14,19 @@ public interface IJwtKeyProvider
 
 public class JwtKeyProvider : IJwtKeyProvider
 {
+    private const string CacheKey = "JwtSecretKey_Cache";
+    private const string JwtSecretKeySettingKey = "JwtSecretKey";
+    private const string JwtSecretKeyFromConfigDescription = "JWT Secret Key (From Env/Args)";
+    private const string JwtSecretKeyGeneratedDescription = "Auto-generated JWT Secret Key";
+    private const string JwtKeyFoundInConfigurationMessage = "JWT Key found in configuration (Environment/Args). Using provided key.";
+    private const string JwtKeyFoundInDatabaseMessage = "JWT Key found in Database Settings. Using stored key.";
+    private const string JwtKeyGeneratingMessage = "No JWT Key found. Generating a new secure random key...";
+    private const string JwtKeyGeneratedMessage = "New JWT Key generated and saved to Database.";
+
     private readonly ISettingService _settingService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<JwtKeyProvider> _logger;
     private readonly IMemoryCache _cache;
-    private const string CacheKey = "JwtSecretKey_Cache";
 
     public JwtKeyProvider(ISettingService settingService, IConfiguration configuration, ILogger<JwtKeyProvider> logger, IMemoryCache cache)
     {
@@ -41,31 +49,31 @@ public class JwtKeyProvider : IJwtKeyProvider
         
         if (!string.IsNullOrEmpty(configKey))
         {
-            _logger.LogInformation("JWT Key found in configuration (Environment/Args). Using provided key.");
+            _logger.LogInformation(JwtKeyFoundInConfigurationMessage);
             
             // Optionally update DB to stay consistent
-            await _settingService.SetSettingAsync("JwtSecretKey", configKey, "JWT Secret Key (From Env/Args)");
+            await _settingService.SetSettingAsync(JwtSecretKeySettingKey, configKey, JwtSecretKeyFromConfigDescription);
             
             _cache.Set(CacheKey, configKey);
             return configKey;
         }
 
         // 2. Check Database Settings
-        var dbKey = await _settingService.GetSettingAsync("JwtSecretKey");
+        var dbKey = await _settingService.GetSettingAsync(JwtSecretKeySettingKey);
         if (!string.IsNullOrEmpty(dbKey))
         {
-            _logger.LogInformation("JWT Key found in Database Settings. Using stored key.");
+            _logger.LogInformation(JwtKeyFoundInDatabaseMessage);
             
             _cache.Set(CacheKey, dbKey);
             return dbKey;
         }
 
         // 3. Generate a new secure key
-        _logger.LogInformation("No JWT Key found. Generating a new secure random key...");
+        _logger.LogInformation(JwtKeyGeneratingMessage);
         var generatedKey = GenerateSecureKey();
         
-        await _settingService.SetSettingAsync("JwtSecretKey", generatedKey, "Auto-generated JWT Secret Key");
-        _logger.LogInformation("New JWT Key generated and saved to Database.");
+        await _settingService.SetSettingAsync(JwtSecretKeySettingKey, generatedKey, JwtSecretKeyGeneratedDescription);
+        _logger.LogInformation(JwtKeyGeneratedMessage);
         
         _cache.Set(CacheKey, generatedKey);
         return generatedKey;

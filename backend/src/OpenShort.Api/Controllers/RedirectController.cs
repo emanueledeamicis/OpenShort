@@ -7,6 +7,8 @@ namespace OpenShort.Api.Controllers;
 [ApiController]
 public class RedirectController : ControllerBase
 {
+    private const string RedirectProcessingErrorMessage = "An error occurred while processing the redirect.";
+
     private readonly ILogger<RedirectController> _logger;
     private readonly ILinkService _linkService;
 
@@ -53,7 +55,7 @@ public class RedirectController : ControllerBase
             _logger.LogError(ex, "Unexpected error during redirection for slug {Slug}", slug);
             // We return a simple Problem detail, but usually for redirects we might just want a 500 error page.
             // Problem Details is fine for API-like behavior.
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: "An error occurred while processing the redirect.");
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: RedirectProcessingErrorMessage);
         }
     }
 }

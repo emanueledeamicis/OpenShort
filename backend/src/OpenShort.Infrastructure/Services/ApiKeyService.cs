@@ -9,9 +9,11 @@ namespace OpenShort.Infrastructure.Services;
 
 public class ApiKeyService : IApiKeyService
 {
-    private readonly AppDbContext _context;
     private const string KeyPrefix = "os_";
+    private const string DefaultApiKeyName = "Default API Key";
     private const int KeyLength = 32;
+
+    private readonly AppDbContext _context;
 
     public ApiKeyService(AppDbContext context)
     {
@@ -25,7 +27,7 @@ public class ApiKeyService : IApiKeyService
             .FirstOrDefaultAsync();
     }
 
-    public async Task<string> GenerateNewKeyAsync(string userId, string name = "Default API Key")
+    public async Task<string> GenerateNewKeyAsync(string userId, string name = DefaultApiKeyName)
     {
         // Delete existing keys (only one allowed)
         var existingKeys = await _context.ApiKeys.ToListAsync();

@@ -10,13 +10,14 @@ namespace OpenShort.Api.Controllers;
 [Authorize]
 public class DomainsController : ControllerBase
 {
-    private readonly IDomainService _domainService;
-    private readonly ILogger<DomainsController> _logger;
+    private const string DomainNotFoundMessage = "Domain not found.";
+    private const string DomainAlreadyExistsMessage = "Domain already exists.";
 
-    public DomainsController(IDomainService domainService, ILogger<DomainsController> logger)
+    private readonly IDomainService _domainService;
+
+    public DomainsController(IDomainService domainService)
     {
         _domainService = domainService;
-        _logger = logger;
     }
 
     // GET: api/Domains
@@ -34,7 +35,7 @@ public class DomainsController : ControllerBase
 
         if (domain == null)
         {
-            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Domain not found.");
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: DomainNotFoundMessage);
         }
 
         return domain;
@@ -44,10 +45,6 @@ public class DomainsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Domain>> CreateDomain(CreateDomainDto dto)
     {
-        // Check manually if desired, but Service Create returns null on conflict
-        // Or we can check ExistsByHost logic? 
-        // Service CreateAsync returns null if exists.
-        
         var domain = new Domain
         {
             Host = dto.Host.ToLowerInvariant(),
@@ -58,7 +55,7 @@ public class DomainsController : ControllerBase
 
         if (createdDomain == null)
         {
-            return Problem(statusCode: StatusCodes.Status409Conflict, detail: "Domain already exists.");
+            return Problem(statusCode: StatusCodes.Status409Conflict, detail: DomainAlreadyExistsMessage);
         }
 
         return CreatedAtAction("GetDomain", new { id = createdDomain.Id }, createdDomain);
@@ -71,7 +68,7 @@ public class DomainsController : ControllerBase
         var domain = await _domainService.GetByIdAsync(id);
         if (domain == null)
         {
-            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Domain not found.");
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: DomainNotFoundMessage);
         }
 
         var count = await _domainService.GetLinkCountByDomainIdAsync(id);
@@ -85,7 +82,7 @@ public class DomainsController : ControllerBase
         var success = await _domainService.DeleteAsync(id);
         if (!success)
         {
-            return Problem(statusCode: StatusCodes.Status404NotFound, detail: "Domain not found.");
+            return Problem(statusCode: StatusCodes.Status404NotFound, detail: DomainNotFoundMessage);
         }
 
         return NoContent();

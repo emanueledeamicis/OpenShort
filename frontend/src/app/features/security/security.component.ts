@@ -138,10 +138,27 @@ export class SecurityComponent implements OnInit {
                 this.cdr.detectChanges(); // Force UI update
             },
             error: (err) => {
-                this.passwordError = err.error?.message || 'Error occurred while changing password.';
+                this.passwordError = this.extractApiErrorMessage(err, 'Error occurred while changing password.');
                 this.isChangingPassword = false;
                 this.cdr.detectChanges(); // Force UI update
             }
         });
+    }
+
+    private extractApiErrorMessage(err: any, fallbackMessage: string): string {
+        const apiError = err?.error;
+        const validationErrors = apiError?.errors;
+
+        if (validationErrors && typeof validationErrors === 'object') {
+            const messages = Object.values(validationErrors)
+                .flatMap((value) => Array.isArray(value) ? value : [value])
+                .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+            if (messages.length > 0) {
+                return messages.join(' ');
+            }
+        }
+
+        return apiError?.message || apiError?.detail || fallbackMessage;
     }
 }

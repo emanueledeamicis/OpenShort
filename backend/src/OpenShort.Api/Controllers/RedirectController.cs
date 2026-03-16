@@ -41,7 +41,7 @@ public class RedirectController : ControllerBase
 
             _logger.LogInformation("Redirecting slug {Slug} to {DestinationUrl}", slug, link.DestinationUrl);
 
-            if (link.RedirectType == Core.Entities.RedirectType.Permanent)
+            if (link.RedirectType == RedirectType.Permanent)
             {
                 return RedirectPermanent(link.DestinationUrl);
             }

@@ -14,10 +14,12 @@ public class DomainsController : ControllerBase
     private const string DomainAlreadyExistsMessage = "Domain already exists.";
 
     private readonly IDomainService _domainService;
+    private readonly ILogger<DomainsController> _logger;
 
-    public DomainsController(IDomainService domainService)
+    public DomainsController(IDomainService domainService, ILogger<DomainsController> logger)
     {
         _domainService = domainService;
+        _logger = logger;
     }
 
     // GET: api/Domains
@@ -55,9 +57,11 @@ public class DomainsController : ControllerBase
 
         if (createdDomain == null)
         {
+            _logger.LogWarning("Domain creation failed because the host already exists: {Host}", dto.Host);
             return Problem(statusCode: StatusCodes.Status409Conflict, detail: DomainAlreadyExistsMessage);
         }
 
+        _logger.LogInformation("Domain created: {Host}", createdDomain.Host);
         return CreatedAtAction("GetDomain", new { id = createdDomain.Id }, createdDomain);
     }
 
@@ -85,6 +89,7 @@ public class DomainsController : ControllerBase
             return Problem(statusCode: StatusCodes.Status404NotFound, detail: DomainNotFoundMessage);
         }
 
+        _logger.LogInformation("Domain deleted: {DomainId}", id);
         return NoContent();
     }
 }

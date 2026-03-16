@@ -13,10 +13,12 @@ public class SettingsController : ControllerBase
     private const string KeyAndValueRequiredMessage = "Key and Value are required.";
 
     private readonly ISettingService _settingService;
+    private readonly ILogger<SettingsController> _logger;
 
-    public SettingsController(ISettingService settingService)
+    public SettingsController(ISettingService settingService, ILogger<SettingsController> logger)
     {
         _settingService = settingService;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -47,6 +49,7 @@ public class SettingsController : ControllerBase
         }
 
         await _settingService.SetSettingAsync(request.Key, request.Value, request.Description);
+        _logger.LogInformation("Setting updated: {SettingKey}", request.Key);
         return Ok();
     }
 }

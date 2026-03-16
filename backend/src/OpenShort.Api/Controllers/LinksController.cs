@@ -69,11 +69,12 @@ public class LinksController : ControllerBase
         }
 
         // 2. Domain Validation
-        string targetDomainHost = dto.Domain;
-        if (string.IsNullOrWhiteSpace(targetDomainHost)) 
+        if (string.IsNullOrWhiteSpace(dto.Domain)) 
         {
              return Problem(statusCode: StatusCodes.Status400BadRequest, detail: DomainRequiredMessage);
         }
+
+        var targetDomainHost = dto.Domain.Trim().ToLowerInvariant();
 
         var authorizedDomain = await _domainService.GetByHostAsync(targetDomainHost);
 
@@ -97,7 +98,7 @@ public class LinksController : ControllerBase
         var link = new Link
         {
             DestinationUrl = formattedDestinationUrl,
-            Slug = dto.Slug?.ToLowerInvariant(),
+            Slug = dto.Slug?.ToLowerInvariant() ?? string.Empty,
             Domain = targetDomainHost,
             Title = dto.Title,
             Notes = dto.Notes,

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using OpenShort.Api.Controllers;
+using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 
@@ -58,21 +59,22 @@ public class UsersControllerTests
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
 
-        _userServiceMock.Verify(service => service.DeleteAsync(It.IsAny<string>()), Times.Never);
+        _userServiceMock.Verify(service => service.DeleteAdminAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Test]
     public async Task CreateUser_ShouldUseRequestBodyValues()
     {
-        var createdUser = new IdentityUser
+        var createdUser = new AppUser
         {
             Id = "user-1",
             UserName = "new@example.com",
-            Email = "new@example.com"
+            Email = "new@example.com",
+            CreatedAt = DateTime.UtcNow
         };
 
         _userServiceMock
-            .Setup(service => service.CreateAsync("new@example.com", "StrongPass123!"))
+            .Setup(service => service.CreateAdminAsync("new@example.com", "StrongPass123!"))
             .ReturnsAsync((createdUser, Enumerable.Empty<IdentityError>()));
 
         var result = await _controller.CreateUser(new CreateUserRequest
@@ -82,5 +84,35 @@ public class UsersControllerTests
         });
 
         result.Result.Should().BeOfType<CreatedAtActionResult>();
+    }
+
+    [Test]
+    public async Task DeleteUser_ShouldReturnBadRequest_WhenDeletingLastAdmin()
+    {
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, "user-123")],
+                    authenticationType: "TestAuth"))
+            }
+        };
+
+        _userServiceMock
+            .Setup(service => service.DeleteAdminAsync("user-456"))
+            .ReturnsAsync((false, new[]
+            {
+                new IdentityError
+                {
+                    Code = "LastAdminDeletionForbidden",
+                    Description = "You cannot delete the last remaining admin user."
+                }
+            }));
+
+        var result = await _controller.DeleteUser("user-456");
+
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
 }

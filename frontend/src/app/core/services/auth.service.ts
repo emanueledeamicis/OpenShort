@@ -13,6 +13,12 @@ export interface InitialSetupStatus {
     userName: string;
 }
 
+interface TokenPayload {
+    exp?: number;
+    nameid?: string;
+    sub?: string;
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -70,6 +76,11 @@ export class AuthService {
         return token;
     }
 
+    getCurrentUserId(): string | null {
+        const payload = this.getTokenPayload();
+        return payload?.nameid || payload?.sub || null;
+    }
+
     private handleAuthSuccess(response: AuthResponse): void {
         if (response?.token) {
             localStorage.setItem(this.tokenStorageKey, response.token);
@@ -78,23 +89,35 @@ export class AuthService {
     }
 
     private isTokenValid(token: string): boolean {
+        const payload = this.parseTokenPayload(token);
+        if (!payload || typeof payload.exp !== 'number') {
+            return false;
+        }
+
+        return payload.exp * 1000 > Date.now();
+    }
+
+    private getTokenPayload(): TokenPayload | null {
+        const token = localStorage.getItem(this.tokenStorageKey);
+        if (!token) {
+            return null;
+        }
+
+        return this.parseTokenPayload(token);
+    }
+
+    private parseTokenPayload(token: string): TokenPayload | null {
         try {
             const payloadBase64 = token.split('.')[1];
             if (!payloadBase64) {
-                return false;
+                return null;
             }
 
             const normalizedPayload = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
             const payloadJson = atob(normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, '='));
-            const payload = JSON.parse(payloadJson) as { exp?: number };
-
-            if (typeof payload.exp !== 'number') {
-                return false;
-            }
-
-            return payload.exp * 1000 > Date.now();
+            return JSON.parse(payloadJson) as TokenPayload;
         } catch {
-            return false;
+            return null;
         }
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using OpenShort.Api.Models;
+using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 
@@ -22,13 +23,13 @@ public class AuthController : ControllerBase
     private const string UnexpectedAdminSetupErrorMessage = "An unexpected error occurred during admin setup.";
     private const string UnexpectedRegistrationErrorMessage = "An unexpected error occurred during registration.";
 
-    private readonly UserManager<IdentityUser> _userManager;
+    private readonly UserManager<AppUser> _userManager;
     private readonly ITokenService _tokenService;
     private readonly ISettingService _settingService;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
-        UserManager<IdentityUser> userManager,
+        UserManager<AppUser> userManager,
         ITokenService tokenService,
         ISettingService settingService,
         ILogger<AuthController> logger)
@@ -156,7 +157,7 @@ public class AuthController : ControllerBase
     {
         try
         {
-            var user = new IdentityUser { UserName = request.Email, Email = request.Email };
+            var user = new AppUser { UserName = request.Email, Email = request.Email, CreatedAt = DateTime.UtcNow };
             var result = await _userManager.CreateAsync(user, request.Password);
 
             if (!result.Succeeded)

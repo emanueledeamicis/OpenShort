@@ -1,9 +1,9 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 
 namespace OpenShort.Infrastructure.Services;
@@ -19,7 +19,7 @@ public class TokenService : ITokenService
         _jwtKeyProvider = jwtKeyProvider;
     }
 
-    public async Task<string> CreateTokenAsync(IdentityUser user, IList<string> roles)
+    public async Task<string> CreateTokenAsync(AppUser user, IList<string> roles)
     {
         // Claims
         var claims = new List<Claim>

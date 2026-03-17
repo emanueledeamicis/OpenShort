@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 
 namespace OpenShort.Api.Controllers;
@@ -18,11 +19,11 @@ public class SecurityController : ControllerBase
     private const string PasswordChangedSuccessMessage = "Password changed successfully.";
     private const string UnexpectedPasswordChangeErrorMessage = "An unexpected error occurred while changing the password.";
 
-    private readonly UserManager<IdentityUser> _userManager;
+    private readonly UserManager<AppUser> _userManager;
     private readonly IApiKeyService _apiKeyService;
     private readonly ILogger<SecurityController> _logger;
 
-    public SecurityController(UserManager<IdentityUser> userManager, IApiKeyService apiKeyService, ILogger<SecurityController> logger)
+    public SecurityController(UserManager<AppUser> userManager, IApiKeyService apiKeyService, ILogger<SecurityController> logger)
     {
         _userManager = userManager;
         _apiKeyService = apiKeyService;

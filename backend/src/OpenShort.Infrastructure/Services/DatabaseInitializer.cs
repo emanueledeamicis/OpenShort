@@ -31,7 +31,7 @@ public class DatabaseInitializer
     private const string AdminPasswordResetCompletedMessage = "Bootstrap admin password reset completed successfully.";
 
     private readonly AppDbContext _context;
-    private readonly UserManager<IdentityUser> _userManager;
+    private readonly UserManager<AppUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly ISettingService _settingService;
     private readonly IConfiguration _configuration;
@@ -40,7 +40,7 @@ public class DatabaseInitializer
 
     public DatabaseInitializer(
         AppDbContext context,
-        UserManager<IdentityUser> userManager,
+        UserManager<AppUser> userManager,
         RoleManager<IdentityRole> roleManager,
         ISettingService settingService,
         IConfiguration configuration,
@@ -119,10 +119,11 @@ public class DatabaseInitializer
         var adminUser = await _userManager.FindByNameAsync(AdminUserName);
         if (adminUser == null)
         {
-            adminUser = new IdentityUser
+            adminUser = new AppUser
             {
                 UserName = AdminUserName,
-                EmailConfirmed = true
+                EmailConfirmed = true,
+                CreatedAt = DateTime.UtcNow
             };
 
             var createResult = await _userManager.CreateAsync(adminUser);

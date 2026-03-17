@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using OpenShort.Api.Controllers;
 using OpenShort.Api.Models;
+using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 
@@ -15,7 +16,7 @@ namespace OpenShort.Tests.Api;
 [TestFixture]
 public class AuthControllerTests
 {
-    private Mock<UserManager<IdentityUser>> _userManagerMock = null!;
+    private Mock<UserManager<AppUser>> _userManagerMock = null!;
     private Mock<ITokenService> _tokenServiceMock = null!;
     private Mock<ISettingService> _settingServiceMock = null!;
     private Mock<ILogger<AuthController>> _loggerMock = null!;
@@ -24,8 +25,8 @@ public class AuthControllerTests
     [SetUp]
     public void Setup()
     {
-        var store = new Mock<IUserStore<IdentityUser>>();
-        _userManagerMock = new Mock<UserManager<IdentityUser>>(
+        var store = new Mock<IUserStore<AppUser>>();
+        _userManagerMock = new Mock<UserManager<AppUser>>(
             store.Object,
             null!,
             null!,
@@ -65,9 +66,10 @@ public class AuthControllerTests
     [Test]
     public async Task SetupAdmin_ShouldSetPassword_ClearFlag_AndReturnToken()
     {
-        var adminUser = new IdentityUser
+        var adminUser = new AppUser
         {
-            UserName = "admin"
+            UserName = "admin",
+            CreatedAt = DateTime.UtcNow
         };
 
         _settingServiceMock

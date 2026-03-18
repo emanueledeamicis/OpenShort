@@ -54,11 +54,13 @@ else
         options.UseSqlite(connectionString));
 }
 
-// Configure SlugSettings
+// Configure settings
 builder.Services.Configure<SlugSettings>(builder.Configuration.GetSection("SlugSettings"));
+builder.Services.Configure<GitHubUpdateOptions>(builder.Configuration.GetSection("GitHubUpdate"));
 
 // Caching Configuration
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<ISlugGenerator, SlugGenerator>();
 builder.Services.AddScoped<IDomainService, DomainService>();
@@ -68,6 +70,7 @@ builder.Services.AddScoped<ITokenService, TokenService>(); // Register Token Ser
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>(); // Register ApiKey Service
 builder.Services.AddScoped<ISettingService, SettingService>();
 builder.Services.AddScoped<DatabaseInitializer>();
+builder.Services.AddSingleton<IUpdateChecker, GitHubUpdateChecker>();
 
 // Register JWT Key Provider
 builder.Services.AddScoped<IJwtKeyProvider, JwtKeyProvider>();

@@ -5,6 +5,8 @@ import { MessageModule } from 'primeng/message';
 import { catchError, forkJoin, of } from 'rxjs';
 import { LinkService } from '../../../core/services/link.service';
 import { DomainService } from '../../../core/services/domain.service';
+import { UpdateService } from '../../../core/services/update.service';
+import packageJson from '../../../../../package.json';
 
 @Component({
    selector: 'app-dashboard',
@@ -22,6 +24,14 @@ import { DomainService } from '../../../core/services/domain.service';
 
        <div class="col-span-full" *ngIf="loadError">
          <p-message severity="warn" [text]="loadError"></p-message>
+       </div>
+
+       <div class="col-span-full" *ngIf="showUpdateMessage">
+         <p-message severity="info">
+           <ng-template pTemplate>
+             A new version of OpenShort is available: v{{ latestVersion }}. You are currently running v{{ currentVersion }}.
+           </ng-template>
+         </p-message>
        </div>
 
        <!-- Total Links -->
@@ -47,6 +57,9 @@ import { DomainService } from '../../../core/services/domain.service';
   `
 })
 export class DashboardComponent implements OnInit {
+   currentVersion = packageJson.version;
+   latestVersion: string | null = null;
+   showUpdateMessage = false;
    totalLinks = 0;
    activeDomains = 0;
    loading = true;
@@ -55,11 +68,13 @@ export class DashboardComponent implements OnInit {
    constructor(
       private linkService: LinkService,
       private domainService: DomainService,
+      private updateService: UpdateService,
       private cdr: ChangeDetectorRef
    ) { }
 
    ngOnInit() {
       this.loadStats();
+      this.loadUpdateStatus();
    }
 
    loadStats() {
@@ -87,5 +102,55 @@ export class DashboardComponent implements OnInit {
             this.cdr.detectChanges();
          }
       });
+   }
+
+   loadUpdateStatus() {
+      this.updateService.getLatestVersion().pipe(
+         catchError(() => of({ latestVersion: null }))
+      ).subscribe({
+         next: ({ latestVersion }) => {
+            this.latestVersion = this.normalizeVersion(latestVersion);
+            this.showUpdateMessage = this.hasNewerVersion(this.currentVersion, this.latestVersion);
+            this.cdr.detectChanges();
+         }
+      });
+   }
+
+   private hasNewerVersion(currentVersion: string | null, latestVersion: string | null): boolean {
+      if (!currentVersion || !latestVersion) {
+         return false;
+      }
+
+      const currentParts = this.parseVersion(currentVersion);
+      const latestParts = this.parseVersion(latestVersion);
+      const maxLength = Math.max(currentParts.length, latestParts.length);
+
+      for (let index = 0; index < maxLength; index++) {
+         const currentPart = currentParts[index] ?? 0;
+         const latestPart = latestParts[index] ?? 0;
+
+         if (latestPart > currentPart) {
+            return true;
+         }
+
+         if (latestPart < currentPart) {
+            return false;
+         }
+      }
+
+      return false;
+   }
+
+   private parseVersion(version: string): number[] {
+      const normalizedVersion = this.normalizeVersion(version) ?? '0';
+
+      return normalizedVersion
+         .split('.')
+         .map(part => Number.parseInt(part, 10))
+         .filter(part => Number.isFinite(part));
+   }
+
+   private normalizeVersion(version: string | null): string | null {
+      return version?.trim().replace(/^v/i, '') || null;
    }
 }

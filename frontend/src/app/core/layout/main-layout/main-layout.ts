@@ -57,6 +57,22 @@ import packageJson from '../../../../../package.json';
                 <span class="font-medium">Logout</span>
             </button>
         </nav>
+
+        <div class="mt-6 border-t border-dashed border-surface-200 pt-4 dark:border-surface-700">
+          <a [href]="repositoryUrl"
+             target="_blank"
+             rel="noreferrer"
+             class="group flex items-center justify-between rounded-lg border border-surface-200 bg-surface-50 px-3 py-3 text-sm text-surface-600 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 dark:border-surface-700 dark:bg-surface-800/60 dark:text-surface-300 dark:hover:border-primary-700 dark:hover:bg-primary-900/20 dark:hover:text-primary-300">
+              <span class="flex items-center gap-3">
+                  <i class="pi pi-github text-base"></i>
+                  <span>
+                      <span class="block font-medium">GitHub Repository</span>
+                      <span class="block text-xs text-surface-500 group-hover:text-primary-600 dark:text-surface-400 dark:group-hover:text-primary-300">External link</span>
+                  </span>
+              </span>
+              <i class="pi pi-external-link text-xs opacity-70"></i>
+          </a>
+        </div>
       </aside>
 
       <!-- Main Content -->
@@ -68,6 +84,7 @@ import packageJson from '../../../../../package.json';
 })
 export class MainLayoutComponent {
   version = packageJson.version;
+  repositoryUrl = 'https://github.com/emanueledeamicis/OpenShort';
 
   constructor(
     private authService: AuthService,

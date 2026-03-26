@@ -41,9 +41,9 @@ export class LoginComponent implements OnInit {
         this.loadingStatus = false;
         this.cdr.detectChanges();
       },
-      error: () => {
+      error: (err) => {
         this.loadingStatus = false;
-        this.errorMessage = 'Unable to load authentication status.';
+        this.errorMessage = this.extractSetupStatusErrorMessage(err);
         this.cdr.detectChanges();
       }
     });
@@ -109,5 +109,25 @@ export class LoginComponent implements OnInit {
     }
 
     return apiError?.message || apiError?.detail || fallbackMessage;
+  }
+
+  private extractSetupStatusErrorMessage(err: any): string {
+    const status = err?.status;
+    const apiError = err?.error;
+    const detail = apiError?.detail || apiError?.message;
+
+    if (typeof detail === 'string' && detail.trim().length > 0) {
+      return detail;
+    }
+
+    if (status === 0) {
+      return 'Unable to reach the OpenShort API. Verify that the container is running and the backend is reachable.';
+    }
+
+    if (status >= 500) {
+      return 'Unable to load authentication status. The backend may have failed to start. Check the container logs, especially the database connection settings.';
+    }
+
+    return 'Unable to load authentication status.';
   }
 }

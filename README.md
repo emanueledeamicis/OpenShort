@@ -243,6 +243,14 @@ OpenShort is a good fit if you are looking for:
 - A branded short link service with custom domains
 - A lightweight open source link shortener for personal use, internal tools, or small teams
 
+## API Documentation
+
+OpenShort includes an integration-focused API guide for services and automation that use API key authentication.
+
+Read the guide here:
+
+- [Integration API Documentation](docs/api.md)
+
 ## Development
 
 ### Backend (.NET)

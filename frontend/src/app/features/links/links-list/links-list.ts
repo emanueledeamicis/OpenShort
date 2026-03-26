@@ -72,6 +72,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
             destinationUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/)]],
             slug: [''],
             domain: ['', Validators.required],
+            redirectType: [RedirectType.Permanent, Validators.required],
             title: [''],
             notes: [''],
             isActive: [true]
@@ -135,7 +136,11 @@ export class LinksListComponent implements OnInit, OnDestroy {
     openCreateDialog() {
         // Reset form and pre-select the last created domain
         const defaultDomain = this.domains.length > 0 ? this.domains[0].host : '';
-        this.linkForm.reset({ isActive: true, domain: defaultDomain });
+        this.linkForm.reset({
+            isActive: true,
+            domain: defaultDomain,
+            redirectType: RedirectType.Permanent
+        });
         this.errorMessage = '';
         this.pageErrorMessage = '';
         this.showDialog = true;

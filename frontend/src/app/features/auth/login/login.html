@@ -14,25 +14,28 @@
 
         <ng-container *ngIf="isInitialSetupRequired; else loginForm">
           <div class="text-center">
-            <h2 class="text-xl font-semibold text-surface-900 dark:text-surface-0">Initial Admin Setup</h2>
+            <h2 class="text-xl font-semibold text-surface-900 dark:text-surface-0">Set Password for {{ setupUserName }}</h2>
             <p class="text-sm text-surface-600 dark:text-surface-400 mt-2">
-              Set the password for the default <strong>{{ setupUserName }}</strong> account.
+              This is the first startup. Choose the password that will be used to sign in with the default administrator account <strong>{{ setupUserName }}</strong>.
+            </p>
+            <p class="text-sm text-surface-600 dark:text-surface-400 mt-2">
+              After setup, log in with username <strong>{{ setupUserName }}</strong> and the password you choose here.
             </p>
           </div>
 
           <div class="flex flex-col gap-2">
-            <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Password</label>
-            <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="Choose a strong password"
+            <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Admin password</label>
+            <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="Choose the password for {{ setupUserName }}"
               [disabled]="loading" />
           </div>
 
           <div class="flex flex-col gap-2">
-            <label for="confirmPassword" class="text-surface-900 dark:text-surface-0 font-medium">Repeat password</label>
-            <input pInputText id="confirmPassword" type="password" [(ngModel)]="confirmPassword" class="w-full" placeholder="Repeat your password"
+            <label for="confirmPassword" class="text-surface-900 dark:text-surface-0 font-medium">Confirm admin password</label>
+            <input pInputText id="confirmPassword" type="password" [(ngModel)]="confirmPassword" class="w-full" placeholder="Repeat the password for {{ setupUserName }}"
               [disabled]="loading" (keyup.enter)="onSetupAdmin()" />
           </div>
 
-          <p-button label="Complete Setup" [loading]="loading" [disabled]="!password || !confirmPassword" (onClick)="onSetupAdmin()"
+          <p-button label="Set Admin Password" [loading]="loading" [disabled]="!password || !confirmPassword" (onClick)="onSetupAdmin()"
             styleClass="w-full" />
         </ng-container>
 

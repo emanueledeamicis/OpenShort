@@ -100,6 +100,7 @@ public class LinksController : ControllerBase
             DestinationUrl = formattedDestinationUrl,
             Slug = dto.Slug?.ToLowerInvariant() ?? string.Empty,
             Domain = targetDomainHost,
+            RedirectType = dto.RedirectType,
             Title = dto.Title,
             Notes = dto.Notes,
             IsActive = dto.IsActive,
@@ -192,6 +193,7 @@ public class CreateLinkDto
     public required string DestinationUrl { get; set; }
     public string? Slug { get; set; }
     public string? Domain { get; set; }
+    public RedirectType RedirectType { get; set; } = RedirectType.Permanent;
     public string? Title { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;

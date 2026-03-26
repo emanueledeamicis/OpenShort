@@ -21,6 +21,7 @@ export interface CreateLinkDto {
     destinationUrl: string;
     slug?: string;
     domain: string;
+    redirectType?: RedirectType;
     title?: string;
     notes?: string;
     isActive?: boolean;

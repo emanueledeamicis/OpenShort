@@ -26,6 +26,14 @@ X-Api-Key: <api-key>
 
 API keys are generated from the OpenShort dashboard by an authenticated administrator.
 
+To get one:
+
+1. Sign in to the dashboard
+2. Open the **Security** section
+3. Generate the API key and save it securely
+
+Use that key in every integration request through the `X-Api-Key` header.
+
 Once generated, use the key in external services, scripts, automation tools, internal portals, or custom apps.
 
 Important:

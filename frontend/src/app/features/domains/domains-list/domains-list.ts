@@ -9,7 +9,7 @@ import { MessageModule } from 'primeng/message';
 import { TooltipModule } from 'primeng/tooltip';
 import { Subscription } from 'rxjs';
 import { DomainService } from '../../../core/services/domain.service';
-import { Domain } from '../../../core/models/api.models';
+import { Domain, DomainNotFoundBehavior, UpdateDomainDto } from '../../../core/models/api.models';
 
 @Component({
     selector: 'app-domains-list',
@@ -30,21 +30,27 @@ import { Domain } from '../../../core/models/api.models';
 export class DomainsListComponent implements OnInit, OnDestroy {
     private static readonly loadDomainsErrorMessage = 'Unable to load domains.';
     private static readonly createDomainErrorMessage = 'Failed to create domain. Please try again.';
+    private static readonly updateDomainErrorMessage = 'Failed to update domain settings. Please try again.';
     private static readonly loadLinkCountErrorMessage = 'Unable to load the number of links for this domain.';
     private static readonly deleteDomainErrorMessage = 'Failed to delete domain. Please try again.';
 
     domains: Domain[] = [];
     loading = false;
     showDialog = false;
+    showSettingsDialog = false;
     showDeleteConfirm = false;
     showFinalConfirm = false;
     saving = false;
+    savingSettings = false;
     deleting = false;
     pageErrorMessage = '';
     errorMessage = '';
+    settingsErrorMessage = '';
     domainForm: FormGroup;
+    settingsForm: FormGroup;
     selectedDomain: Domain | null = null;
     linkCount = 0;
+    readonly domainNotFoundBehavior = DomainNotFoundBehavior;
     private subscription = new Subscription();
 
     constructor(
@@ -54,6 +60,12 @@ export class DomainsListComponent implements OnInit, OnDestroy {
     ) {
         this.domainForm = this.fb.group({
             host: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)]]
+        });
+
+        this.settingsForm = this.fb.group({
+            isActive: [true],
+            notFoundBehavior: [DomainNotFoundBehavior.OpenShortPage, Validators.required],
+            notFoundRedirectUrl: ['']
         });
     }
 
@@ -96,6 +108,53 @@ export class DomainsListComponent implements OnInit, OnDestroy {
     closeDialog() {
         this.showDialog = false;
         this.errorMessage = '';
+    }
+
+    openSettingsDialog(domain: Domain) {
+        this.selectedDomain = domain;
+        this.settingsErrorMessage = '';
+        this.settingsForm.reset({
+            isActive: domain.isActive,
+            notFoundBehavior: domain.notFoundBehavior ?? DomainNotFoundBehavior.OpenShortPage,
+            notFoundRedirectUrl: domain.notFoundRedirectUrl ?? ''
+        });
+        this.showSettingsDialog = true;
+    }
+
+    closeSettingsDialog() {
+        this.showSettingsDialog = false;
+        this.settingsErrorMessage = '';
+        this.selectedDomain = null;
+    }
+
+    saveDomainSettings() {
+        if (!this.selectedDomain) {
+            return;
+        }
+
+        const dto = this.buildUpdateDomainDto();
+        if (!dto) {
+            return;
+        }
+
+        this.savingSettings = true;
+        this.settingsErrorMessage = '';
+        this.cdr.detectChanges();
+
+        const sub = this.domainService.update(this.selectedDomain.id, dto).subscribe({
+            next: () => {
+                this.savingSettings = false;
+                this.closeSettingsDialog();
+                this.loadDomains();
+            },
+            error: (err) => {
+                this.savingSettings = false;
+                this.settingsErrorMessage = this.extractApiErrorMessage(err, DomainsListComponent.updateDomainErrorMessage);
+                this.cdr.detectChanges();
+            }
+        });
+
+        this.subscription.add(sub);
     }
 
     saveDomain() {
@@ -184,6 +243,31 @@ export class DomainsListComponent implements OnInit, OnDestroy {
             }
         });
         this.subscription.add(sub);
+    }
+
+    requiresCustomUrl(): boolean {
+        return this.settingsForm.get('notFoundBehavior')?.value === DomainNotFoundBehavior.RedirectToCustomUrl;
+    }
+
+    private buildUpdateDomainDto(): UpdateDomainDto | null {
+        const notFoundBehavior = this.settingsForm.get('notFoundBehavior')?.value as DomainNotFoundBehavior;
+        const rawRedirectUrl = this.settingsForm.get('notFoundRedirectUrl')?.value as string | null;
+        const notFoundRedirectUrl = rawRedirectUrl?.trim() || null;
+
+        if (notFoundBehavior === DomainNotFoundBehavior.RedirectToCustomUrl) {
+            const isValidUrl = !!notFoundRedirectUrl && /^https?:\/\/.+/i.test(notFoundRedirectUrl);
+            if (!isValidUrl) {
+                this.settingsErrorMessage = 'Enter a valid absolute URL for the custom 404 redirect.';
+                this.cdr.detectChanges();
+                return null;
+            }
+        }
+
+        return {
+            isActive: !!this.settingsForm.get('isActive')?.value,
+            notFoundBehavior,
+            notFoundRedirectUrl: notFoundBehavior === DomainNotFoundBehavior.RedirectToCustomUrl ? notFoundRedirectUrl : null
+        };
     }
 
     private extractApiErrorMessage(err: any, fallbackMessage: string): string {

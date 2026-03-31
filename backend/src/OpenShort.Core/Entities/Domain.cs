@@ -12,5 +12,10 @@ public class Domain
 
     public bool IsActive { get; set; } = true;
 
+    public DomainNotFoundBehavior NotFoundBehavior { get; set; } = DomainNotFoundBehavior.OpenShortPage;
+
+    [MaxLength(2048)]
+    public string? NotFoundRedirectUrl { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

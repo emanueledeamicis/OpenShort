@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Link not available</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fafc 0%, #eef6ff 100%);
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 640px;
+      background: #ffffff;
+      border: 1px solid #dbeafe;
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(15, 23, 42, 0.10);
+      padding: 40px 32px;
+      text-align: center;
+    }
+    .logo {
+      display: block;
+      width: min(320px, 100%);
+      height: auto;
+      margin: 0 auto 28px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(28px, 5vw, 42px);
+      line-height: 1.1;
+    }
+    p {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.6;
+      color: #334155;
+    }
+    .meta {
+      margin-top: 20px;
+      font-size: 14px;
+      color: #64748b;
+    }
+    .promo {
+      margin-top: 28px;
+      font-size: 14px;
+      color: #475569;
+    }
+    .promo a {
+      color: #0284c7;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-decoration: none;
+    }
+    .promo a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img src="/assets/logo-horizontal.png" alt="OpenShort" class="logo">
+    <h1>This short link is not available.</h1>
+    <p>The requested short URL could not be found, may have expired, or is no longer active.</p>
+    <p class="meta">Requested link: {{HOST}}/{{SLUG}}</p>
+    <p class="promo">Want your own free and open-source short link platform? <a href="https://openshort.tech" target="_blank" rel="noopener noreferrer">OPENSHORT.TECH</a></p>
+  </main>
+</body>
+</html>

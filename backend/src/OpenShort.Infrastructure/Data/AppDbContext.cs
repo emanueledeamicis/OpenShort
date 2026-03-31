@@ -28,5 +28,9 @@ public class AppDbContext : IdentityDbContext<AppUser>
         modelBuilder.Entity<Domain>()
             .HasIndex(d => d.Host)
             .IsUnique();
+
+        modelBuilder.Entity<Domain>()
+            .Property(d => d.NotFoundBehavior)
+            .HasConversion<int>();
     }
 }

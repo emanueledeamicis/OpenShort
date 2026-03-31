@@ -262,6 +262,13 @@ namespace OpenShort.Infrastructure.Data.Migrations.Sqlite
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("NotFoundBehavior")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("NotFoundRedirectUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Host")

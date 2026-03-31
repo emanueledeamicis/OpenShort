@@ -39,8 +39,21 @@ export interface Domain {
     id: number;
     host: string;
     isActive: boolean;
+    notFoundBehavior: DomainNotFoundBehavior;
+    notFoundRedirectUrl?: string | null;
 }
 
 export interface CreateDomainDto {
     host: string;
+}
+
+export enum DomainNotFoundBehavior {
+    OpenShortPage = 0,
+    RedirectToCustomUrl = 1
+}
+
+export interface UpdateDomainDto {
+    isActive: boolean;
+    notFoundBehavior: DomainNotFoundBehavior;
+    notFoundRedirectUrl?: string | null;
 }

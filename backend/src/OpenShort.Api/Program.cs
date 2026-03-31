@@ -198,6 +198,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseStatusCodePages();
 
 app.UseRouting(); // Explicitly add routing

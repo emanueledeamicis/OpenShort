@@ -275,6 +275,13 @@ namespace OpenShort.Infrastructure.Data.Migrations.MySql
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
 
+                    b.Property<int>("NotFoundBehavior")
+                        .HasColumnType("int");
+
+                    b.Property<string>("NotFoundRedirectUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("varchar(2048)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Host")

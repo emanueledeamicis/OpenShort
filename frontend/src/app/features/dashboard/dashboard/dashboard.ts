@@ -1,7 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CardModule } from 'primeng/card';
-import { MessageModule } from 'primeng/message';
 import { catchError, forkJoin, of } from 'rxjs';
 import { LinkService } from '../../../core/services/link.service';
 import { DomainService } from '../../../core/services/domain.service';
@@ -11,7 +10,7 @@ import packageJson from '../../../../../package.json';
 @Component({
    selector: 'app-dashboard',
    standalone: true,
-   imports: [CommonModule, CardModule, MessageModule],
+   imports: [CommonModule, CardModule],
    template: `
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
        <!-- Welcome Card -->
@@ -23,15 +22,26 @@ import packageJson from '../../../../../package.json';
        </div>
 
        <div class="col-span-full" *ngIf="loadError">
-         <p-message severity="warn" [text]="loadError"></p-message>
+         <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800">
+            {{ loadError }}
+         </div>
        </div>
 
        <div class="col-span-full" *ngIf="showUpdateMessage">
-         <p-message severity="info">
-           <ng-template pTemplate>
-             A new version of OpenShort is available: v{{ latestVersion }}. You are currently running v{{ currentVersion }}.
-           </ng-template>
-         </p-message>
+         <div class="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-4 text-sky-900 md:flex-row md:items-center md:justify-between">
+            <div>
+               <p class="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">Update available</p>
+               <p class="mt-1 text-sm md:text-base">{{ updateMessage }}</p>
+            </div>
+            <a
+               class="inline-flex items-center justify-center rounded-lg border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-700 transition hover:border-sky-400 hover:bg-sky-100"
+               [href]="releaseUrl"
+               target="_blank"
+               rel="noopener noreferrer"
+            >
+               View release
+            </a>
+         </div>
        </div>
 
        <!-- Total Links -->
@@ -57,6 +67,7 @@ import packageJson from '../../../../../package.json';
   `
 })
 export class DashboardComponent implements OnInit {
+   readonly releaseUrl = 'https://github.com/emanueledeamicis/OpenShort/releases/latest';
    currentVersion = packageJson.version;
    latestVersion: string | null = null;
    showUpdateMessage = false;
@@ -64,6 +75,14 @@ export class DashboardComponent implements OnInit {
    activeDomains = 0;
    loading = true;
    loadError = '';
+
+   get updateMessage(): string {
+      if (!this.latestVersion) {
+         return '';
+      }
+
+      return `A new version of OpenShort is available: v${this.latestVersion}. You are currently running v${this.currentVersion}.`;
+   }
 
    constructor(
       private linkService: LinkService,

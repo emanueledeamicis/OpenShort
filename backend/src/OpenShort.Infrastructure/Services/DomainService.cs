@@ -41,6 +41,21 @@ public class DomainService : IDomainService
         return domain;
     }
 
+    public async Task<bool> UpdateAsync(Domain domain)
+    {
+        _context.Entry(domain).State = EntityState.Modified;
+
+        try
+        {
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ExistsAsync(domain.Id);
+        }
+    }
+
     public async Task<bool> DeleteAsync(long id)
     {
         var domain = await _context.Domains.FindAsync(id);

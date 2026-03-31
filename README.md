@@ -8,6 +8,8 @@ OpenShort is an open source, self-hosted URL shortener for Docker, SQLite, and M
 
 It is built for people who want a modern Bitly alternative they can run on their own infrastructure, with custom domains, a web dashboard, and easy short link management in a single container.
 
+Project website: [openshort.tech](https://openshort.tech)
+
 ## Why OpenShort
 
 - Self-hosted link shortener with a modern web dashboard
@@ -88,6 +90,8 @@ On the first startup, OpenShort creates the default administrator account:
 - **Username**: `admin`
 
 When you open the dashboard for the first time, you will be prompted to choose the password for the `admin` account. No default password is shipped with the application.
+
+After signing in, open the dashboard **Security** section to generate or manage the API key used by external integrations. Programmatic requests to the integration API must send that key in the `X-Api-Key` header.
 
 ### Stopping the application
 
@@ -247,8 +251,15 @@ OpenShort is a good fit if you are looking for:
 
 OpenShort includes an integration-focused API guide for services and automation that use API key authentication.
 
+Important:
+
+- Integration API requests require an API key in the `X-Api-Key` header
+- The API key is generated and managed from the OpenShort dashboard in the **Security** section
+- Dashboard login uses JWT authentication, but external integrations should use the API key instead
+
 Read the guide here:
 
+- [API Documentation](https://openshort.tech/docs/#api)
 - [Integration API Documentation](docs/api.md)
 
 ## Development
@@ -406,6 +417,10 @@ Once your domain is pointing to the server, sign in to the OpenShort dashboard a
 ## License
 
 MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Author
+
+OpenShort is created by [Emanuele De Amicis](https://emanueledeamicis.com).
 
 ## Contributing
 

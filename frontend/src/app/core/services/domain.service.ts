@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { Domain, CreateDomainDto } from '../models/api.models';
+import { Domain, CreateDomainDto, UpdateDomainDto } from '../models/api.models';
 
 @Injectable({
     providedIn: 'root'
@@ -21,6 +21,10 @@ export class DomainService {
 
     create(dto: CreateDomainDto): Observable<Domain> {
         return this.http.post<Domain>(this.apiUrl, dto);
+    }
+
+    update(id: number, dto: UpdateDomainDto): Observable<Domain> {
+        return this.http.put<Domain>(`${this.apiUrl}/${id}`, dto);
     }
 
     delete(id: number): Observable<void> {

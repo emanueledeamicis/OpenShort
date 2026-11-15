@@ -114,6 +114,7 @@ public class RedirectControllerTests
         var result = await _controller.RedirectToUrl(slug);
 
         // Assert
+        result.Should().BeOfType<ContentResult>();
         var contentResult = result as ContentResult;
         contentResult!.Content.Should().NotContain("<script>");
         contentResult.Content.Should().Contain("&lt;script&gt;");
@@ -161,5 +162,72 @@ public class RedirectControllerTests
         // Assert
         result.Should().BeOfType<ContentResult>();
         (result as ContentResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Test]
+    public async Task RedirectToUrl_ShouldReturnNotFoundPage_WhenHostIsNotRegistered()
+    {
+        // Arrange
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "unknown")).ReturnsAsync((Link?)null);
+        _mockDomainService.Setup(s => s.GetByHostAsync("localhost")).ReturnsAsync((Domain?)null);
+
+        // Act
+        var result = await _controller.RedirectToUrl("unknown");
+
+        // Assert
+        result.Should().BeOfType<ContentResult>();
+        (result as ContentResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        _mockDomainService.Verify(s => s.GetByHostAsync("localhost"), Times.Once);
+    }
+
+    [Test]
+    public async Task RedirectToUrl_ShouldReturnNotFoundPage_WhenBehaviorIsOpenShortPageEvenIfCustomUrlIsSet()
+    {
+        // Arrange
+        var domain = new Domain
+        {
+            Host = "localhost",
+            NotFoundBehavior = DomainNotFoundBehavior.OpenShortPage,
+            NotFoundRedirectUrl = "https://example.com/not-found"
+        };
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "unknown")).ReturnsAsync((Link?)null);
+        _mockDomainService.Setup(s => s.GetByHostAsync("localhost")).ReturnsAsync(domain);
+
+        // Act
+        var result = await _controller.RedirectToUrl("unknown");
+
+        // Assert
+        result.Should().BeOfType<ContentResult>();
+        (result as ContentResult)!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Test]
+    public async Task RedirectToUrl_ShouldUseTemplateFile_AndHtmlEncodeHostAndSlug()
+    {
+        // Arrange
+        var webRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(webRoot);
+        try
+        {
+            File.WriteAllText(Path.Combine(webRoot, "missing-link.html"), "<p id=\"custom-template\">{{HOST}}|{{SLUG}}</p>");
+            _mockEnvironment.Setup(e => e.WebRootPath).Returns(webRoot);
+            _controller.ControllerContext.HttpContext.Request.Host = new HostString("<b>host");
+
+            var slug = "<script>alert(1)</script>";
+            _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("<b>host", slug)).ReturnsAsync((Link?)null);
+
+            // Act
+            var result = await _controller.RedirectToUrl(slug);
+
+            // Assert
+            result.Should().BeOfType<ContentResult>();
+            var contentResult = result as ContentResult;
+            contentResult!.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+            contentResult.Content.Should().Be("<p id=\"custom-template\">&lt;b&gt;host|&lt;script&gt;alert(1)&lt;/script&gt;</p>");
+        }
+        finally
+        {
+            Directory.Delete(webRoot, recursive: true);
+        }
     }
 }

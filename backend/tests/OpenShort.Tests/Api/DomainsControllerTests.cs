@@ -122,7 +122,107 @@ public class DomainsControllerTests
         problemDetails!.Detail.Should().Be("Domain already exists.");
     }
 
+    [Test]
+    public async Task UpdateDomain_ShouldReturnNotFound_WhenDoesNotExist()
+    {
+        // Arrange
+        var dto = new UpdateDomainDto { IsActive = true, NotFoundBehavior = DomainNotFoundBehavior.OpenShortPage };
 
+        // Act
+        var result = await _controller.UpdateDomain(999, dto);
+
+        // Assert
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Test]
+    public async Task UpdateDomain_ShouldSaveCustomNotFoundUrl_WhenValid()
+    {
+        // Arrange
+        var domain = new Domain { Host = "example.com", IsActive = true };
+        _context.Domains.Add(domain);
+        await _context.SaveChangesAsync();
+
+        var dto = new UpdateDomainDto
+        {
+            IsActive = false,
+            NotFoundBehavior = DomainNotFoundBehavior.RedirectToCustomUrl,
+            NotFoundRedirectUrl = "  https://example.com/not-found  "
+        };
+
+        // Act
+        var result = await _controller.UpdateDomain(domain.Id, dto);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+
+        var dbDomain = await _context.Domains.FindAsync(domain.Id);
+        dbDomain!.IsActive.Should().BeFalse();
+        dbDomain.NotFoundBehavior.Should().Be(DomainNotFoundBehavior.RedirectToCustomUrl);
+        dbDomain.NotFoundRedirectUrl.Should().Be("https://example.com/not-found");
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("not-a-url")]
+    public async Task UpdateDomain_ShouldReturnBadRequest_WhenCustomNotFoundUrlIsInvalid(string? url)
+    {
+        // Arrange
+        var domain = new Domain { Host = "example.com", IsActive = true };
+        _context.Domains.Add(domain);
+        await _context.SaveChangesAsync();
+
+        var dto = new UpdateDomainDto
+        {
+            IsActive = true,
+            NotFoundBehavior = DomainNotFoundBehavior.RedirectToCustomUrl,
+            NotFoundRedirectUrl = url
+        };
+
+        // Act
+        var result = await _controller.UpdateDomain(domain.Id, dto);
+
+        // Assert
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+
+        var dbDomain = await _context.Domains.FindAsync(domain.Id);
+        dbDomain!.NotFoundBehavior.Should().Be(DomainNotFoundBehavior.OpenShortPage);
+        dbDomain.NotFoundRedirectUrl.Should().BeNull();
+    }
+
+    [Test]
+    public async Task UpdateDomain_ShouldClearCustomNotFoundUrl_WhenBehaviorIsOpenShortPage()
+    {
+        // Arrange
+        var domain = new Domain
+        {
+            Host = "example.com",
+            IsActive = true,
+            NotFoundBehavior = DomainNotFoundBehavior.RedirectToCustomUrl,
+            NotFoundRedirectUrl = "https://example.com/not-found"
+        };
+        _context.Domains.Add(domain);
+        await _context.SaveChangesAsync();
+
+        var dto = new UpdateDomainDto
+        {
+            IsActive = true,
+            NotFoundBehavior = DomainNotFoundBehavior.OpenShortPage,
+            NotFoundRedirectUrl = "https://example.com/ignored"
+        };
+
+        // Act
+        var result = await _controller.UpdateDomain(domain.Id, dto);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+
+        var dbDomain = await _context.Domains.FindAsync(domain.Id);
+        dbDomain!.NotFoundBehavior.Should().Be(DomainNotFoundBehavior.OpenShortPage);
+        dbDomain.NotFoundRedirectUrl.Should().BeNull();
+    }
 
     [Test]
     public async Task DeleteDomain_ShouldDelete_WhenExists()

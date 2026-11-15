@@ -25,7 +25,7 @@ public static class DatabaseConnectionDescriber
             var builder = new MySqlConnectionStringBuilder(connectionString ?? string.Empty);
             return $"server: {builder.Server}, port: {builder.Port}, database: {builder.Database}";
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
         {
             // Never fall back to the raw connection string: it may contain the password
             return UnreadableDetails;
@@ -39,7 +39,7 @@ public static class DatabaseConnectionDescriber
             var builder = new SqliteConnectionStringBuilder(connectionString ?? string.Empty);
             return $"data source: {builder.DataSource}";
         }
-        catch (ArgumentException)
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
         {
             // Never fall back to the raw connection string: it may contain the password
             return UnreadableDetails;

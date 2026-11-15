@@ -69,14 +69,39 @@ public class DatabaseConnectionDescriberTests
         description.Should().NotContain("S3cr3t!Pass");
     }
 
-    [TestCase(true)]
-    [TestCase(false)]
-    public void Describe_ShouldNotThrow_WhenConnectionStringIsNull(bool useMySql)
+    [TestCase("Data Source=data/openshort.db;Default Timeout=abc;Password=S3cr3t!Pass", false)]
+    [TestCase("Data Source=data/openshort.db;Pooling=maybe;Password=S3cr3t!Pass", false)]
+    [TestCase("Server=db.internal;Port=abc;Password=S3cr3t!Pass", true)]
+    [TestCase("Server=db.internal;Pooling=maybe;Password=S3cr3t!Pass", true)]
+    public void Describe_ShouldNotThrowOrExposePassword_WhenAnOptionValueIsInvalid(string connectionString, bool useMySql)
     {
         // Act
-        var act = () => DatabaseConnectionDescriber.Describe(null, useMySql);
+        var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql);
 
         // Assert
-        act.Should().NotThrow();
+        description.Should().Contain("connection details could not be read");
+        description.Should().NotContain("S3cr3t!Pass");
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    public void Describe_ShouldReturnDefaults_WhenMySqlConnectionStringIsMissing(string? connectionString)
+    {
+        // Act
+        var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql: true);
+
+        // Assert
+        description.Should().Be("MySQL (server: , port: 3306, database: )");
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    public void Describe_ShouldReturnEmptyDataSource_WhenSqliteConnectionStringIsMissing(string? connectionString)
+    {
+        // Act
+        var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql: false);
+
+        // Assert
+        description.Should().Be("SQLite (data source: )");
     }
 }

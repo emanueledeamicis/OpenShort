@@ -32,7 +32,6 @@ bool useMySql = string.Equals(databaseProvider, "MySql", StringComparison.Ordina
 
 if (useMySql)
 {
-    Console.WriteLine($"Using MySQL Database Provider. Connection String: {connectionString}");
     builder.Services.AddDbContext<AppDbContext, MySqlDbContext>(options =>
         options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 }
@@ -49,10 +48,12 @@ else
         connectionString = "Data Source=data/openshort.db";
     }
     
-    Console.WriteLine($"Using SQLite Database Provider. Connection String: {connectionString}");
     builder.Services.AddDbContext<AppDbContext, SqliteDbContext>(options =>
         options.UseSqlite(connectionString));
 }
+
+// Logged once the app is built. The connection string itself is never logged: it may contain the password
+var databaseDescription = DatabaseConnectionDescriber.Describe(connectionString, useMySql);
 
 // Configure settings
 builder.Services.Configure<SlugSettings>(builder.Configuration.GetSection("SlugSettings"));
@@ -182,6 +183,8 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+app.Logger.LogInformation("Using database provider: {Database}", databaseDescription);
 
 // Configure the HTTP request pipeline.
 

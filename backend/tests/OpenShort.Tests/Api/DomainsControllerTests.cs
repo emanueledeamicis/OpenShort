@@ -157,6 +157,8 @@ public class DomainsControllerTests
         // Assert
         result.Should().BeOfType<OkObjectResult>();
 
+        // Drop tracked entities so the assertions read what was actually persisted
+        _context.ChangeTracker.Clear();
         var dbDomain = await _context.Domains.FindAsync(domain.Id);
         dbDomain!.IsActive.Should().BeFalse();
         dbDomain.NotFoundBehavior.Should().Be(DomainNotFoundBehavior.RedirectToCustomUrl);
@@ -187,6 +189,8 @@ public class DomainsControllerTests
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
 
+        // Drop tracked entities so the assertions read what was actually persisted
+        _context.ChangeTracker.Clear();
         var dbDomain = await _context.Domains.FindAsync(domain.Id);
         dbDomain!.NotFoundBehavior.Should().Be(DomainNotFoundBehavior.OpenShortPage);
         dbDomain.NotFoundRedirectUrl.Should().BeNull();
@@ -219,6 +223,8 @@ public class DomainsControllerTests
         // Assert
         result.Should().BeOfType<OkObjectResult>();
 
+        // Drop tracked entities so the assertions read what was actually persisted
+        _context.ChangeTracker.Clear();
         var dbDomain = await _context.Domains.FindAsync(domain.Id);
         dbDomain!.NotFoundBehavior.Should().Be(DomainNotFoundBehavior.OpenShortPage);
         dbDomain.NotFoundRedirectUrl.Should().BeNull();

@@ -230,4 +230,60 @@ public class RedirectControllerTests
             Directory.Delete(webRoot, recursive: true);
         }
     }
+
+    [Test]
+    public async Task RedirectToUrl_ShouldUseContentRootWwwroot_WhenWebRootPathIsNull()
+    {
+        // Arrange
+        var contentRoot = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(Path.Combine(contentRoot, "wwwroot"));
+        try
+        {
+            File.WriteAllText(Path.Combine(contentRoot, "wwwroot", "missing-link.html"), "<p id=\"content-root-template\">{{SLUG}}</p>");
+            _mockEnvironment.Setup(e => e.WebRootPath).Returns((string)null!);
+            _mockEnvironment.Setup(e => e.ContentRootPath).Returns(contentRoot);
+            _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "unknown")).ReturnsAsync((Link?)null);
+
+            // Act
+            var result = await _controller.RedirectToUrl("unknown");
+
+            // Assert
+            result.Should().BeOfType<ContentResult>();
+            (result as ContentResult)!.Content.Should().Be("<p id=\"content-root-template\">unknown</p>");
+        }
+        finally
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public async Task RedirectToUrl_ShouldReturnBadRequest_WhenSlugIsEmpty(string slug)
+    {
+        // Act
+        var result = await _controller.RedirectToUrl(slug);
+
+        // Assert
+        result.Should().BeOfType<BadRequestResult>();
+        _mockLinkService.Verify(s => s.ResolveAndTrackRedirectAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task RedirectToUrl_ShouldReturnServerError_WhenServiceThrows()
+    {
+        // Arrange
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "boom")).ThrowsAsync(new InvalidOperationException("db down"));
+
+        // Act
+        var result = await _controller.RedirectToUrl("boom");
+
+        // Assert
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status500InternalServerError);
+
+        var problemDetails = (result as ObjectResult)!.Value as ProblemDetails;
+        problemDetails!.Detail.Should().Be("An error occurred while processing the redirect.");
+        problemDetails.Detail.Should().NotContain("db down");
+    }
 }

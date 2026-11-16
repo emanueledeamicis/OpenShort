@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -16,7 +17,7 @@ namespace OpenShort.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private const string InvalidCredentialsMessage = "Invalid username/email or password";
-    private const string AccountLockedMessage = "Too many failed login attempts. Please try again later.";
+    private const string LoginDelayedMessageFormat = "Too many failed login attempts. Try again in {0} second(s).";
     private const string PasswordConfirmationMismatchMessage = "Password and confirmation do not match.";
     private const string InitialAdminSetupCompletedMessage = "Initial admin setup has already been completed.";
     private const string AdminUserUnavailableMessage = "Admin user is not available.";
@@ -28,17 +29,20 @@ public class AuthController : ControllerBase
 
     private readonly UserManager<AppUser> _userManager;
     private readonly ITokenService _tokenService;
+    private readonly LoginThrottle _loginThrottle;
     private readonly ISettingService _settingService;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         UserManager<AppUser> userManager,
         ITokenService tokenService,
+        LoginThrottle loginThrottle,
         ISettingService settingService,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _tokenService = tokenService;
+        _loginThrottle = loginThrottle;
         _settingService = settingService;
         _logger = logger;
     }
@@ -63,34 +67,29 @@ public class AuthController : ControllerBase
         {
             var user = await _userManager.FindByEmailAsync(request.Identifier)
                 ?? await _userManager.FindByNameAsync(request.Identifier);
-            if (user == null)
+
+            // Unknown identifiers are throttled like existing accounts, so the delay does not reveal which accounts exist
+            var attempt = await _loginThrottle.AttemptAsync(
+                GetThrottleSubject(user, request.Identifier),
+                ClientAddress.GetPartitionKey(HttpContext),
+                async () => user != null && await _userManager.CheckPasswordAsync(user, request.Password),
+                HttpContext.RequestAborted);
+
+            if (attempt.RetryAfter is { } retryAfter)
             {
-                _logger.LogWarning("Login attempt failed: User not found {Identifier}", request.Identifier);
+                var retryAfterSeconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+                _logger.LogWarning("Login attempt delayed after repeated failures {Identifier}", request.Identifier);
+                Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                return StatusCode(
+                    StatusCodes.Status429TooManyRequests,
+                    new { message = string.Format(CultureInfo.InvariantCulture, LoginDelayedMessageFormat, retryAfterSeconds) });
+            }
+
+            if (!attempt.Succeeded || user == null)
+            {
+                _logger.LogWarning("Login attempt failed: Invalid credentials {Identifier}", request.Identifier);
                 return Unauthorized(InvalidCredentialsMessage);
             }
-
-            if (await _userManager.IsLockedOutAsync(user))
-            {
-                _logger.LogWarning("Login attempt rejected: Account locked out {Identifier}", request.Identifier);
-                return AccountLocked();
-            }
-
-            var result = await _userManager.CheckPasswordAsync(user, request.Password);
-            if (!result)
-            {
-                // Counts the failure and locks the account once the configured limit is reached
-                await _userManager.AccessFailedAsync(user);
-                if (await _userManager.IsLockedOutAsync(user))
-                {
-                    _logger.LogWarning("Account locked out after too many failed login attempts {Identifier}", request.Identifier);
-                    return AccountLocked();
-                }
-
-                _logger.LogWarning("Login attempt failed: Invalid password {Identifier}", request.Identifier);
-                return Unauthorized(InvalidCredentialsMessage);
-            }
-
-            await _userManager.ResetAccessFailedCountAsync(user);
 
             var roles = await _userManager.GetRolesAsync(user);
             var token = await _tokenService.CreateTokenAsync(user, roles);
@@ -103,16 +102,16 @@ public class AuthController : ControllerBase
                 UserName = user.UserName!
             });
         }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            // The client went away while the attempt was waiting for its turn
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during login for {Identifier}", request.Identifier);
             return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedLoginErrorMessage);
         }
-    }
-
-    private ObjectResult AccountLocked()
-    {
-        return StatusCode(StatusCodes.Status429TooManyRequests, new { message = AccountLockedMessage });
     }
 
     [HttpPost("setup-admin")]
@@ -161,6 +160,10 @@ public class AuthController : ControllerBase
 
             var roles = await _userManager.GetRolesAsync(adminUser);
             var token = await _tokenService.CreateTokenAsync(adminUser, roles);
+
+            _loginThrottle.Reset(
+                GetThrottleSubject(adminUser, DatabaseInitializer.AdminUserName),
+                ClientAddress.GetPartitionKey(HttpContext));
 
             _logger.LogInformation("Initial admin setup completed successfully.");
             return Ok(new AuthResponse
@@ -212,5 +215,13 @@ public class AuthController : ControllerBase
             _logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
             return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedRegistrationErrorMessage);
         }
+    }
+
+    // Failures are counted on the account when the identifier matches one, whatever its spelling:
+    // user name, email and every variant accepted by the user lookup share the same count.
+    // The prefixes keep an unknown identifier from colliding with the id of an account.
+    private static string GetThrottleSubject(AppUser? user, string identifier)
+    {
+        return user != null ? $"user:{user.Id}" : $"identifier:{identifier}";
     }
 }

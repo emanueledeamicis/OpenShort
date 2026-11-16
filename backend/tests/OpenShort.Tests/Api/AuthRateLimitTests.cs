@@ -17,6 +17,7 @@ public class AuthRateLimitTests
 {
     private const string LimitedPath = "/limited";
     private const string UnlimitedPath = "/unlimited";
+    private const string AddressHeader = "X-Test-Address";
 
     private WebApplication _app = null!;
     private HttpClient _client = null!;
@@ -29,6 +30,16 @@ public class AuthRateLimitTests
         builder.Services.AddRateLimiter(AuthProtection.ConfigureRateLimiter);
 
         _app = builder.Build();
+        _app.Use((httpContext, next) =>
+        {
+            // The test server has no connection: tests choose the client address with a header
+            if (httpContext.Request.Headers.TryGetValue(AddressHeader, out var address))
+            {
+                httpContext.Connection.RemoteIpAddress = IPAddress.Parse(address.ToString());
+            }
+
+            return next(httpContext);
+        });
         _app.UseRateLimiter();
         _app.MapPost(LimitedPath, () => Results.Ok()).RequireRateLimiting(AuthProtection.RateLimitPolicy);
         _app.MapPost(UnlimitedPath, () => Results.Ok());
@@ -67,6 +78,24 @@ public class AuthRateLimitTests
     }
 
     [Test]
+    public async Task RateLimitPolicy_ShouldShareTheLimit_AmongIpv6AddressesOfTheSamePrefix()
+    {
+        // Arrange
+        for (var request = 0; request < AuthProtection.RateLimitPermitsPerWindow; request++)
+        {
+            using var allowedResponse = await PostFromAsync("2001:db8:1:2::1");
+        }
+
+        // Act
+        using var samePrefixResponse = await PostFromAsync("2001:db8:1:2::2");
+        using var otherPrefixResponse = await PostFromAsync("2001:db8:1:3::1");
+
+        // Assert
+        samePrefixResponse.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        otherPrefixResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Test]
     public async Task RateLimitPolicy_ShouldNotLimitEndpoints_WithoutThePolicy()
     {
         // Act
@@ -79,5 +108,12 @@ public class AuthRateLimitTests
 
         // Assert
         statusCodes.Should().AllSatisfy(statusCode => statusCode.Should().Be(HttpStatusCode.OK));
+    }
+
+    private async Task<HttpResponseMessage> PostFromAsync(string address)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, LimitedPath);
+        request.Headers.Add(AddressHeader, address);
+        return await _client.SendAsync(request);
     }
 }

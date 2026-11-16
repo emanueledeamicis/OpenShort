@@ -1,10 +1,13 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using OpenShort.Api.Auth;
 using OpenShort.Api.Controllers;
 using OpenShort.Api.Models;
 using OpenShort.Core.Entities;
@@ -43,8 +46,12 @@ public class AuthControllerTests
         _controller = new AuthController(
             _userManagerMock.Object,
             _tokenServiceMock.Object,
+            new LoginThrottle(TimeProvider.System, NullLogger<LoginThrottle>.Instance),
             _settingServiceMock.Object,
-            _loggerMock.Object);
+            _loggerMock.Object)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
     }
 
     [Test]

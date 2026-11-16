@@ -1,3 +1,4 @@
+using System.Net;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using OpenShort.Api.Auth;
 using OpenShort.Api.Controllers;
@@ -23,12 +25,17 @@ namespace OpenShort.Tests.Api;
 public class AuthControllerLoginTests
 {
     private const string UserName = "admin";
+    private const string Email = "owner@example.com";
     private const string Password = "StrongPass123!";
     private const string WrongPassword = "WrongPass123!";
+    private const string AttackerAddress = "203.0.113.10";
+    private const string OwnerAddress = "198.51.100.20";
 
     private ServiceProvider _serviceProvider = null!;
     private UserManager<AppUser> _userManager = null!;
     private Mock<ITokenService> _tokenServiceMock = null!;
+    private Mock<ISettingService> _settingServiceMock = null!;
+    private ManualTimeProvider _timeProvider = null!;
     private AuthController _controller = null!;
 
     [SetUp]
@@ -46,7 +53,7 @@ public class AuthControllerLoginTests
         _userManager = _serviceProvider.GetRequiredService<UserManager<AppUser>>();
 
         var createResult = await _userManager.CreateAsync(
-            new AppUser { UserName = UserName, CreatedAt = DateTime.UtcNow },
+            new AppUser { UserName = UserName, Email = Email, CreatedAt = DateTime.UtcNow },
             Password);
         createResult.Succeeded.Should().BeTrue();
 
@@ -55,10 +62,13 @@ public class AuthControllerLoginTests
             .Setup(service => service.CreateTokenAsync(It.IsAny<AppUser>(), It.IsAny<IList<string>>()))
             .ReturnsAsync("token-value");
 
+        _settingServiceMock = new Mock<ISettingService>();
+        _timeProvider = new ManualTimeProvider();
         _controller = new AuthController(
             _userManager,
             _tokenServiceMock.Object,
-            new Mock<ISettingService>().Object,
+            new LoginThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance),
+            _settingServiceMock.Object,
             new Mock<ILogger<AuthController>>().Object);
     }
 
@@ -96,34 +106,32 @@ public class AuthControllerLoginTests
     public async Task Login_ShouldReturnUnauthorized_WhenUserDoesNotExist()
     {
         // Act
-        var result = await _controller.Login(new LoginRequest { Identifier = "nobody", Password = Password });
+        var result = await LoginAsync(Password, identifier: "nobody");
 
         // Assert
         result.Result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
     [Test]
-    public async Task Login_ShouldLockAccount_WhenFailedAttemptsReachTheLimit()
+    public async Task Login_ShouldReturnTooManyRequests_AfterRepeatedFailures()
     {
+        // Arrange
+        await FailLoginAsync(times: 3);
+
         // Act
-        var results = new List<ActionResult<AuthResponse>>();
-        for (var attempt = 0; attempt < AuthProtection.MaxFailedAccessAttempts; attempt++)
-        {
-            results.Add(await LoginAsync(WrongPassword));
-        }
+        var result = await LoginAsync(WrongPassword);
 
         // Assert
-        results.Take(AuthProtection.MaxFailedAccessAttempts - 1)
-            .Should().AllSatisfy(result => result.Result.Should().BeOfType<UnauthorizedObjectResult>());
-        results.Last().Result.Should().BeOfType<ObjectResult>()
+        result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        _controller.Response.Headers.RetryAfter.ToString().Should().Be("1");
     }
 
     [Test]
-    public async Task Login_ShouldRejectCorrectPassword_WhileAccountIsLocked()
+    public async Task Login_ShouldRejectCorrectPassword_WhileTheDelayIsPending()
     {
         // Arrange
-        await LockAccountAsync();
+        await FailLoginAsync(times: 3);
 
         // Act
         var result = await LoginAsync(Password);
@@ -137,12 +145,11 @@ public class AuthControllerLoginTests
     }
 
     [Test]
-    public async Task Login_ShouldSucceed_WhenLockoutHasExpired()
+    public async Task Login_ShouldSucceed_WhenTheDelayHasElapsed()
     {
         // Arrange
-        await LockAccountAsync();
-        var user = await _userManager.FindByNameAsync(UserName);
-        await _userManager.SetLockoutEndDateAsync(user!, DateTimeOffset.UtcNow.AddMinutes(-1));
+        await FailLoginAsync(times: 3);
+        _timeProvider.Advance(LoginThrottle.GetDelay(3));
 
         // Act
         var result = await LoginAsync(Password);
@@ -152,36 +159,127 @@ public class AuthControllerLoginTests
     }
 
     [Test]
-    public async Task Login_ShouldResetFailedAttempts_WhenLoginSucceeds()
+    public async Task Login_ShouldSucceedFromAnotherAddress_WhileAnAttackerIsDelayed()
     {
         // Arrange
-        for (var attempt = 0; attempt < AuthProtection.MaxFailedAccessAttempts - 1; attempt++)
-        {
-            await LoginAsync(WrongPassword);
-        }
+        await FailLoginAsync(times: 20);
 
         // Act
-        var successfulLogin = await LoginAsync(Password);
-        var failedLoginAfterSuccess = await LoginAsync(WrongPassword);
+        var attackerResult = await LoginAsync(Password);
+        var ownerResult = await LoginAsync(Password, address: OwnerAddress);
 
         // Assert
-        successfulLogin.Result.Should().BeOfType<OkObjectResult>();
-        failedLoginAfterSuccess.Result.Should().BeOfType<UnauthorizedObjectResult>();
-        var user = await _userManager.FindByNameAsync(UserName);
-        (await _userManager.GetAccessFailedCountAsync(user!)).Should().Be(1);
+        attackerResult.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        ownerResult.Result.Should().BeOfType<OkObjectResult>();
     }
 
     [Test]
-    public void ConfigureIdentity_ShouldSetLockoutAndPasswordPolicy()
+    public async Task Login_ShouldDelayUnknownUsers_LikeExistingOnes()
+    {
+        // Arrange
+        await FailLoginAsync(times: 3, identifier: "nobody");
+
+        // Act
+        var result = await LoginAsync(WrongPassword, identifier: "nobody");
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldShareTheDelay_BetweenUserNameAndEmail()
+    {
+        // Arrange
+        await FailLoginAsync(times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, identifier: Email);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldShareTheDelay_AmongSpellingsOfTheSameAccount()
+    {
+        // Arrange
+        const string kelvinSign = "\u212A";
+        var createResult = await _userManager.CreateAsync(
+            new AppUser { UserName = "mark", CreatedAt = DateTime.UtcNow },
+            Password);
+        createResult.Succeeded.Should().BeTrue();
+        await FailLoginAsync(times: 3, identifier: "mark");
+
+        // Act
+        var result = await LoginAsync(Password, identifier: "mar" + kelvinSign);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnClientClosedRequest_WhenTheRequestIsAborted()
+    {
+        // Arrange
+        SetClientAddress(AttackerAddress);
+        _controller.HttpContext.RequestAborted = new CancellationToken(canceled: true);
+
+        // Act
+        var result = await _controller.Login(new LoginRequest { Identifier = UserName, Password = Password });
+
+        // Assert
+        result.Result.Should().BeOfType<StatusCodeResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status499ClientClosedRequest);
+    }
+
+    [Test]
+    public async Task SetupAdmin_ShouldRemoveThePendingDelay_ForTheClientCompletingIt()
+    {
+        // Arrange
+        var user = await _userManager.FindByNameAsync(UserName);
+        (await _userManager.RemovePasswordAsync(user!)).Succeeded.Should().BeTrue();
+        _settingServiceMock
+            .Setup(service => service.GetSettingAsync(It.IsAny<string>(), true))
+            .ReturnsAsync(true);
+        await FailLoginAsync(times: 5);
+
+        // Act
+        var setupResult = await _controller.SetupAdmin(new SetupAdminRequest
+        {
+            Password = Password,
+            ConfirmPassword = Password
+        });
+        var loginResult = await LoginAsync(Password);
+
+        // Assert
+        setupResult.Result.Should().BeOfType<OkObjectResult>();
+        loginResult.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldNotLockTheAccountInTheDatabase_AfterRepeatedFailures()
+    {
+        // Act
+        await FailLoginAsync(times: 20);
+
+        // Assert
+        var user = await _userManager.FindByNameAsync(UserName);
+        (await _userManager.IsLockedOutAsync(user!)).Should().BeFalse();
+        (await _userManager.GetAccessFailedCountAsync(user!)).Should().Be(0);
+    }
+
+    [Test]
+    public void ConfigureIdentity_ShouldSetPasswordPolicy()
     {
         // Act
         var options = new IdentityOptions();
         AuthProtection.ConfigureIdentity(options);
 
         // Assert
-        options.Lockout.AllowedForNewUsers.Should().BeTrue();
-        options.Lockout.MaxFailedAccessAttempts.Should().Be(5);
-        options.Lockout.DefaultLockoutTimeSpan.Should().Be(TimeSpan.FromMinutes(5));
         options.Password.RequiredLength.Should().Be(8);
         options.Password.RequireDigit.Should().BeTrue();
         options.Password.RequireLowercase.Should().BeTrue();
@@ -219,16 +317,36 @@ public class AuthControllerLoginTests
         attribute.PolicyName.Should().Be(AuthProtection.RateLimitPolicy);
     }
 
-    private Task<ActionResult<AuthResponse>> LoginAsync(string password)
+    private Task<ActionResult<AuthResponse>> LoginAsync(
+        string password,
+        string identifier = UserName,
+        string address = AttackerAddress)
     {
-        return _controller.Login(new LoginRequest { Identifier = UserName, Password = password });
+        SetClientAddress(address);
+
+        return _controller.Login(new LoginRequest { Identifier = identifier, Password = password });
     }
 
-    private async Task LockAccountAsync()
+    private void SetClientAddress(string address)
     {
-        for (var attempt = 0; attempt < AuthProtection.MaxFailedAccessAttempts; attempt++)
+        var httpContext = new DefaultHttpContext();
+        httpContext.Connection.RemoteIpAddress = IPAddress.Parse(address);
+        _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+    }
+
+    private async Task FailLoginAsync(int times, string identifier = UserName)
+    {
+        for (var failures = 1; failures <= times; failures++)
         {
-            await LoginAsync(WrongPassword);
+            var result = await LoginAsync(WrongPassword, identifier);
+            result.Result.Should().BeOfType<UnauthorizedObjectResult>();
+
+            // Wait out the delay between attempts, so that each one is verified and counted.
+            // The delay caused by the last failure is left pending.
+            if (failures < times)
+            {
+                _timeProvider.Advance(LoginThrottle.GetDelay(failures));
+            }
         }
     }
 }

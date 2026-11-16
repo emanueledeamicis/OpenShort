@@ -148,6 +148,10 @@ builder.Services.AddIdentityCore<AppUser>(OpenShort.Api.Auth.AuthProtection.Conf
     .AddEntityFrameworkStores<AppDbContext>()
     .AddApiEndpoints();
 
+// Delays repeated failed logins; state is in memory, hence the singleton
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<OpenShort.Api.Auth.LoginThrottle>();
+
 // Limits the request rate on the endpoints marked with the auth policy (login, admin setup)
 builder.Services.AddRateLimiter(OpenShort.Api.Auth.AuthProtection.ConfigureRateLimiter);
 

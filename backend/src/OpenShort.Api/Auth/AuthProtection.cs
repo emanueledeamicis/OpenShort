@@ -6,20 +6,17 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace OpenShort.Api.Auth;
 
 /// <summary>
-/// Brute-force protections for the authentication endpoints:
-/// password policy, account lockout and request rate limiting.
+/// Brute-force protections for the authentication endpoints: password policy and request rate limiting.
+/// The delay on repeated failed logins is handled by <see cref="LoginThrottle"/>.
 /// </summary>
 public static class AuthProtection
 {
     public const string RateLimitPolicy = "auth";
     public const int RateLimitPermitsPerWindow = 10;
-    public const int MaxFailedAccessAttempts = 5;
     public const int RequiredPasswordLength = 8;
 
     public static readonly TimeSpan RateLimitWindow = TimeSpan.FromMinutes(1);
-    public static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(5);
 
-    private const string UnknownClientPartition = "unknown";
     private const string RateLimitExceededMessage = "Too many attempts. Please try again later.";
 
     public static void ConfigureIdentity(IdentityOptions options)
@@ -30,10 +27,6 @@ public static class AuthProtection
         options.Password.RequireLowercase = true;
         options.Password.RequireUppercase = true;
         options.Password.RequireNonAlphanumeric = true;
-
-        options.Lockout.AllowedForNewUsers = true;
-        options.Lockout.MaxFailedAccessAttempts = MaxFailedAccessAttempts;
-        options.Lockout.DefaultLockoutTimeSpan = LockoutDuration;
     }
 
     public static void ConfigureRateLimiter(RateLimiterOptions options)
@@ -42,7 +35,7 @@ public static class AuthProtection
 
         // One window per client address
         options.AddPolicy(RateLimitPolicy, httpContext => RateLimitPartition.GetFixedWindowLimiter(
-            httpContext.Connection.RemoteIpAddress?.ToString() ?? UnknownClientPartition,
+            ClientAddress.GetPartitionKey(httpContext),
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = RateLimitPermitsPerWindow,

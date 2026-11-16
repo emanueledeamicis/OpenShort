@@ -25,6 +25,7 @@ namespace OpenShort.Tests.Api;
 public class AuthControllerLoginTests
 {
     private const string UserName = "admin";
+    private const string Email = "owner@example.com";
     private const string Password = "StrongPass123!";
     private const string WrongPassword = "WrongPass123!";
     private const string AttackerAddress = "203.0.113.10";
@@ -33,6 +34,7 @@ public class AuthControllerLoginTests
     private ServiceProvider _serviceProvider = null!;
     private UserManager<AppUser> _userManager = null!;
     private Mock<ITokenService> _tokenServiceMock = null!;
+    private Mock<ISettingService> _settingServiceMock = null!;
     private ManualTimeProvider _timeProvider = null!;
     private AuthController _controller = null!;
 
@@ -51,7 +53,7 @@ public class AuthControllerLoginTests
         _userManager = _serviceProvider.GetRequiredService<UserManager<AppUser>>();
 
         var createResult = await _userManager.CreateAsync(
-            new AppUser { UserName = UserName, CreatedAt = DateTime.UtcNow },
+            new AppUser { UserName = UserName, Email = Email, CreatedAt = DateTime.UtcNow },
             Password);
         createResult.Succeeded.Should().BeTrue();
 
@@ -60,12 +62,13 @@ public class AuthControllerLoginTests
             .Setup(service => service.CreateTokenAsync(It.IsAny<AppUser>(), It.IsAny<IList<string>>()))
             .ReturnsAsync("token-value");
 
+        _settingServiceMock = new Mock<ISettingService>();
         _timeProvider = new ManualTimeProvider();
         _controller = new AuthController(
             _userManager,
             _tokenServiceMock.Object,
             new LoginThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance),
-            new Mock<ISettingService>().Object,
+            _settingServiceMock.Object,
             new Mock<ILogger<AuthController>>().Object);
     }
 
@@ -186,6 +189,78 @@ public class AuthControllerLoginTests
     }
 
     [Test]
+    public async Task Login_ShouldShareTheDelay_BetweenUserNameAndEmail()
+    {
+        // Arrange
+        await FailLoginAsync(times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, identifier: Email);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldShareTheDelay_AmongSpellingsOfTheSameAccount()
+    {
+        // Arrange
+        const string kelvinSign = "\u212A";
+        var createResult = await _userManager.CreateAsync(
+            new AppUser { UserName = "mark", CreatedAt = DateTime.UtcNow },
+            Password);
+        createResult.Succeeded.Should().BeTrue();
+        await FailLoginAsync(times: 3, identifier: "mark");
+
+        // Act
+        var result = await LoginAsync(Password, identifier: "mar" + kelvinSign);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnClientClosedRequest_WhenTheRequestIsAborted()
+    {
+        // Arrange
+        SetClientAddress(AttackerAddress);
+        _controller.HttpContext.RequestAborted = new CancellationToken(canceled: true);
+
+        // Act
+        var result = await _controller.Login(new LoginRequest { Identifier = UserName, Password = Password });
+
+        // Assert
+        result.Result.Should().BeOfType<StatusCodeResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status499ClientClosedRequest);
+    }
+
+    [Test]
+    public async Task SetupAdmin_ShouldRemoveThePendingDelay_ForTheClientCompletingIt()
+    {
+        // Arrange
+        var user = await _userManager.FindByNameAsync(UserName);
+        (await _userManager.RemovePasswordAsync(user!)).Succeeded.Should().BeTrue();
+        _settingServiceMock
+            .Setup(service => service.GetSettingAsync(It.IsAny<string>(), true))
+            .ReturnsAsync(true);
+        await FailLoginAsync(times: 5);
+
+        // Act
+        var setupResult = await _controller.SetupAdmin(new SetupAdminRequest
+        {
+            Password = Password,
+            ConfirmPassword = Password
+        });
+        var loginResult = await LoginAsync(Password);
+
+        // Assert
+        setupResult.Result.Should().BeOfType<OkObjectResult>();
+        loginResult.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
     public async Task Login_ShouldNotLockTheAccountInTheDatabase_AfterRepeatedFailures()
     {
         // Act
@@ -247,18 +322,24 @@ public class AuthControllerLoginTests
         string identifier = UserName,
         string address = AttackerAddress)
     {
+        SetClientAddress(address);
+
+        return _controller.Login(new LoginRequest { Identifier = identifier, Password = password });
+    }
+
+    private void SetClientAddress(string address)
+    {
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = IPAddress.Parse(address);
         _controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
-
-        return _controller.Login(new LoginRequest { Identifier = identifier, Password = password });
     }
 
     private async Task FailLoginAsync(int times, string identifier = UserName)
     {
         for (var failures = 1; failures <= times; failures++)
         {
-            await LoginAsync(WrongPassword, identifier);
+            var result = await LoginAsync(WrongPassword, identifier);
+            result.Result.Should().BeOfType<UnauthorizedObjectResult>();
 
             // Wait out the delay between attempts, so that each one is verified and counted.
             // The delay caused by the last failure is left pending.

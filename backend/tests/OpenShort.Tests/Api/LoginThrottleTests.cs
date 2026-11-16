@@ -168,11 +168,44 @@ public class LoginThrottleTests
     }
 
     [Test]
-    public async Task AttemptAsync_ShouldForgetFailures_AfterTheIdlePeriod()
+    public async Task AttemptAsync_ShouldForgetFailuresWithoutDelay_AfterTheIdlePeriod()
+    {
+        // Arrange
+        await FailAsync(times: 2);
+        _timeProvider.Advance(LoginThrottle.ForgetAfter);
+
+        // Act
+        var results = new List<LoginAttemptResult>();
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            results.Add(await FailAsync());
+        }
+
+        // Assert
+        results.Should().AllSatisfy(result => result.Should().Be(LoginAttemptResult.Failure));
+    }
+
+    [Test]
+    public async Task AttemptAsync_ShouldKeepDelayedFailures_AfterTheIdlePeriod()
     {
         // Arrange
         await FailAsync(times: 3);
         _timeProvider.Advance(LoginThrottle.GetDelay(3) + LoginThrottle.ForgetAfter);
+
+        // Act
+        await FailAsync();
+        var result = await SucceedAsync();
+
+        // Assert
+        result.RetryAfter.Should().Be(LoginThrottle.GetDelay(4));
+    }
+
+    [Test]
+    public async Task AttemptAsync_ShouldForgetDelayedFailures_AfterTheLongIdlePeriod()
+    {
+        // Arrange
+        await FailAsync(times: 3);
+        _timeProvider.Advance(LoginThrottle.GetDelay(3) + LoginThrottle.ForgetDelayedAfter);
 
         // Act
         var results = new List<LoginAttemptResult>();

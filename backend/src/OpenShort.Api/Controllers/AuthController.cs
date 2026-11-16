@@ -65,19 +65,14 @@ public class AuthController : ControllerBase
     {
         try
         {
-            AppUser? user = null;
-            var clientAddress = ClientAddress.GetPartitionKey(HttpContext);
+            var user = await _userManager.FindByEmailAsync(request.Identifier)
+                ?? await _userManager.FindByNameAsync(request.Identifier);
 
             // Unknown identifiers are throttled like existing accounts, so the delay does not reveal which accounts exist
             var attempt = await _loginThrottle.AttemptAsync(
-                request.Identifier,
-                clientAddress,
-                async () =>
-                {
-                    user = await _userManager.FindByEmailAsync(request.Identifier)
-                        ?? await _userManager.FindByNameAsync(request.Identifier);
-                    return user != null && await _userManager.CheckPasswordAsync(user, request.Password);
-                },
+                GetThrottleSubject(user, request.Identifier),
+                ClientAddress.GetPartitionKey(HttpContext),
+                async () => user != null && await _userManager.CheckPasswordAsync(user, request.Password),
                 HttpContext.RequestAborted);
 
             if (attempt.RetryAfter is { } retryAfter)
@@ -106,6 +101,11 @@ public class AuthController : ControllerBase
                 Email = user.Email,
                 UserName = user.UserName!
             });
+        }
+        catch (OperationCanceledException) when (HttpContext.RequestAborted.IsCancellationRequested)
+        {
+            // The client went away while the attempt was waiting for its turn
+            return StatusCode(StatusCodes.Status499ClientClosedRequest);
         }
         catch (Exception ex)
         {
@@ -161,7 +161,9 @@ public class AuthController : ControllerBase
             var roles = await _userManager.GetRolesAsync(adminUser);
             var token = await _tokenService.CreateTokenAsync(adminUser, roles);
 
-            _loginThrottle.Reset(DatabaseInitializer.AdminUserName, ClientAddress.GetPartitionKey(HttpContext));
+            _loginThrottle.Reset(
+                GetThrottleSubject(adminUser, DatabaseInitializer.AdminUserName),
+                ClientAddress.GetPartitionKey(HttpContext));
 
             _logger.LogInformation("Initial admin setup completed successfully.");
             return Ok(new AuthResponse
@@ -213,5 +215,13 @@ public class AuthController : ControllerBase
             _logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
             return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedRegistrationErrorMessage);
         }
+    }
+
+    // Failures are counted on the account when the identifier matches one, whatever its spelling:
+    // user name, email and every variant accepted by the user lookup share the same count.
+    // The prefixes keep an unknown identifier from colliding with the id of an account.
+    private static string GetThrottleSubject(AppUser? user, string identifier)
+    {
+        return user != null ? $"user:{user.Id}" : $"identifier:{identifier}";
     }
 }

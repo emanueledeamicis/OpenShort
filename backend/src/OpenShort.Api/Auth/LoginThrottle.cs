@@ -6,8 +6,10 @@ namespace OpenShort.Api.Auth;
 
 /// <summary>
 /// Slows down repeated failed logins with a delay that grows at every consecutive failure.
-/// The delay applies to the pair of login identifier and client address, so an attacker
+/// The delay applies to the pair of login subject and client address, so an attacker
 /// slows down only their own attempts and cannot keep the account owner out.
+/// The subject is chosen by the caller: the account when the identifier matches one,
+/// so that every spelling of the same account shares one count.
 /// State is kept in memory: it is lost when the application restarts.
 /// </summary>
 public class LoginThrottle
@@ -18,6 +20,10 @@ public class LoginThrottle
     public static readonly TimeSpan InitialDelay = TimeSpan.FromSeconds(1);
     public static readonly TimeSpan MaxDelay = TimeSpan.FromMinutes(15);
     public static readonly TimeSpan ForgetAfter = TimeSpan.FromMinutes(15);
+
+    // Failures that already caused a delay are remembered for longer,
+    // otherwise waiting out the idle period would be faster than waiting out the delays
+    public static readonly TimeSpan ForgetDelayedAfter = TimeSpan.FromHours(24);
 
     private const int GateCount = 64;
     private const int MaxDelayDoublings = 30;
@@ -55,15 +61,15 @@ public class LoginThrottle
 
     /// <summary>
     /// Runs a login attempt. Credentials are verified only if no delay is pending,
-    /// and attempts of the same client on the same identifier never run in parallel.
+    /// and attempts of the same client on the same subject never run in parallel.
     /// </summary>
     public async Task<LoginAttemptResult> AttemptAsync(
-        string identifier,
+        string subject,
         string clientAddress,
         Func<Task<bool>> verifyCredentials,
         CancellationToken cancellationToken = default)
     {
-        var key = CreateKey(identifier, clientAddress);
+        var key = CreateKey(subject, clientAddress);
         var gate = _gates[(key.GetHashCode() & int.MaxValue) % GateCount];
 
         await gate.WaitAsync(cancellationToken);
@@ -91,9 +97,9 @@ public class LoginThrottle
         }
     }
 
-    public void Reset(string identifier, string clientAddress)
+    public void Reset(string subject, string clientAddress)
     {
-        _entries.TryRemove(CreateKey(identifier, clientAddress), out _);
+        _entries.TryRemove(CreateKey(subject, clientAddress), out _);
     }
 
     private Entry? GetEntry(string key, DateTimeOffset now)
@@ -126,7 +132,8 @@ public class LoginThrottle
 
         var failures = (entry?.Failures ?? 0) + 1;
         var blockedUntil = now + GetDelay(failures);
-        _entries[key] = new Entry(failures, blockedUntil, blockedUntil + ForgetAfter);
+        var forgetAfter = failures > FailuresWithoutDelay ? ForgetDelayedAfter : ForgetAfter;
+        _entries[key] = new Entry(failures, blockedUntil, blockedUntil + forgetAfter);
     }
 
     private void RemoveExpiredEntries(DateTimeOffset now)
@@ -141,9 +148,9 @@ public class LoginThrottle
     }
 
     // Hashed so that the size of a tracked entry does not depend on the submitted identifier
-    private static string CreateKey(string identifier, string clientAddress)
+    private static string CreateKey(string subject, string clientAddress)
     {
-        var value = $"{identifier.Trim().ToUpperInvariant()}\n{clientAddress}";
+        var value = $"{subject.Trim().ToUpperInvariant()}\n{clientAddress}";
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     }
 

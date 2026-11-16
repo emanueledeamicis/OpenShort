@@ -143,10 +143,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-builder.Services.AddIdentityCore<AppUser>()
+builder.Services.AddIdentityCore<AppUser>(OpenShort.Api.Auth.AuthProtection.ConfigureIdentity)
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()
     .AddApiEndpoints();
+
+// Limits the request rate on the endpoints marked with the auth policy (login, admin setup)
+builder.Services.AddRateLimiter(OpenShort.Api.Auth.AuthProtection.ConfigureRateLimiter);
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
@@ -205,6 +208,8 @@ app.UseStaticFiles();
 app.UseStatusCodePages();
 
 app.UseRouting(); // Explicitly add routing
+
+app.UseRateLimiter(); // After routing: the policies are attached to the endpoints
 
 app.UseAuthentication(); // Ensure Authentication Middleware is called
 app.UseAuthorization();

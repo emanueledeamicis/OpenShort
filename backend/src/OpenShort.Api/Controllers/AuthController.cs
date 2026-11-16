@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
+using OpenShort.Api.Auth;
 using OpenShort.Api.Models;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
@@ -14,6 +16,7 @@ namespace OpenShort.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private const string InvalidCredentialsMessage = "Invalid username/email or password";
+    private const string AccountLockedMessage = "Too many failed login attempts. Please try again later.";
     private const string PasswordConfirmationMismatchMessage = "Password and confirmation do not match.";
     private const string InitialAdminSetupCompletedMessage = "Initial admin setup has already been completed.";
     private const string AdminUserUnavailableMessage = "Admin user is not available.";
@@ -53,6 +56,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(AuthProtection.RateLimitPolicy)]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
     {
         try
@@ -65,12 +69,28 @@ public class AuthController : ControllerBase
                 return Unauthorized(InvalidCredentialsMessage);
             }
 
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                _logger.LogWarning("Login attempt rejected: Account locked out {Identifier}", request.Identifier);
+                return AccountLocked();
+            }
+
             var result = await _userManager.CheckPasswordAsync(user, request.Password);
             if (!result)
             {
-                 _logger.LogWarning("Login attempt failed: Invalid password {Identifier}", request.Identifier);
+                // Counts the failure and locks the account once the configured limit is reached
+                await _userManager.AccessFailedAsync(user);
+                if (await _userManager.IsLockedOutAsync(user))
+                {
+                    _logger.LogWarning("Account locked out after too many failed login attempts {Identifier}", request.Identifier);
+                    return AccountLocked();
+                }
+
+                _logger.LogWarning("Login attempt failed: Invalid password {Identifier}", request.Identifier);
                 return Unauthorized(InvalidCredentialsMessage);
             }
+
+            await _userManager.ResetAccessFailedCountAsync(user);
 
             var roles = await _userManager.GetRolesAsync(user);
             var token = await _tokenService.CreateTokenAsync(user, roles);
@@ -90,7 +110,13 @@ public class AuthController : ControllerBase
         }
     }
 
+    private ObjectResult AccountLocked()
+    {
+        return StatusCode(StatusCodes.Status429TooManyRequests, new { message = AccountLockedMessage });
+    }
+
     [HttpPost("setup-admin")]
+    [EnableRateLimiting(AuthProtection.RateLimitPolicy)]
     public async Task<ActionResult<AuthResponse>> SetupAdmin([FromBody] SetupAdminRequest request)
     {
         if (request.Password != request.ConfirmPassword)

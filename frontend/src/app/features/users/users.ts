@@ -53,7 +53,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     ) {
         this.userForm = this.fb.group({
             email: ['', [Validators.required, Validators.email]],
-            password: ['', [Validators.required, Validators.minLength(6)]],
+            password: ['', [Validators.required, Validators.minLength(8)]],
             confirmPassword: ['', Validators.required]
         });
     }

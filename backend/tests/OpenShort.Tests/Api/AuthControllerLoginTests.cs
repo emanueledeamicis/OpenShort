@@ -204,12 +204,13 @@ public class AuthControllerLoginTests
         result.Succeeded.Should().BeFalse();
     }
 
-    [TestCase(nameof(AuthController.Login))]
-    [TestCase(nameof(AuthController.SetupAdmin))]
-    public void Endpoint_ShouldBeRateLimited(string methodName)
+    [TestCase(typeof(AuthController), nameof(AuthController.Login))]
+    [TestCase(typeof(AuthController), nameof(AuthController.SetupAdmin))]
+    [TestCase(typeof(SecurityController), nameof(SecurityController.ChangePassword))]
+    public void Endpoint_ShouldBeRateLimited(Type controllerType, string methodName)
     {
         // Act
-        var attribute = typeof(AuthController).GetMethod(methodName)!
+        var attribute = controllerType.GetMethod(methodName)!
             .GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true)
             .Cast<EnableRateLimitingAttribute>()
             .Single();

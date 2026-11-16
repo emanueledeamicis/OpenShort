@@ -134,14 +134,10 @@ builder.Services.AddAuthorization(options =>
     options.DefaultPolicy = defaultAuthorizationPolicyBuilder.Build();
 });
 
-// Configure usage of forwarded headers (Nginx proxy)
+// Forwarded headers are accepted only from the bundled Nginx (loopback) and from the declared reverse proxies
+var trustedProxies = builder.Configuration[OpenShort.Api.Auth.TrustedProxies.ConfigurationKey];
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.All;
-    // Clearing known networks/proxies lets it accept headers from any proxy (safe within Docker network)
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+    OpenShort.Api.Auth.TrustedProxies.Configure(options, trustedProxies));
 
 builder.Services.AddIdentityCore<AppUser>(OpenShort.Api.Auth.AuthProtection.ConfigureIdentity)
     .AddRoles<IdentityRole>()
@@ -193,9 +189,14 @@ var app = builder.Build();
 
 app.Logger.LogInformation("Using database provider: {Database}", databaseDescription);
 
+var declaredProxies = OpenShort.Api.Auth.TrustedProxies.ParseEntries(trustedProxies);
+app.Logger.LogInformation(
+    "Forwarded headers are trusted from loopback and from: {TrustedProxies}",
+    declaredProxies.Count > 0 ? string.Join(", ", declaredProxies) : "(no other proxy declared)");
+
 // Configure the HTTP request pipeline.
 
-// Critical: Process Forwarded Headers (X-Forwarded-For, X-Forwarded-Proto) from Nginx
+// Critical: Process Forwarded Headers (X-Forwarded-For, X-Forwarded-Proto) from trusted proxies
 app.UseForwardedHeaders();
 
 // Global Exception Handler - returns RFC 7807 for unhandled exceptions

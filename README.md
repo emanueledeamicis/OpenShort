@@ -343,6 +343,9 @@ All environment variables can be configured directly inside the `environment:` s
 # Security
 - ASPNETCORE_ENVIRONMENT=Production
 - ADMIN_PASSWORD_RESET=temporary_emergency_password
+
+# Optional: reverse proxies allowed to report the client IP address
+- TRUSTED_PROXIES=172.16.0.0/12
 ```
 
 > **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (for example, `Password$$` becomes `Password$$$$`) so Docker does not interpret them as variables.
@@ -401,6 +404,25 @@ server {
     }
 }
 ```
+
+#### Trusted proxies
+
+OpenShort uses the client IP address to limit login attempts. A reverse proxy reports that address in the `X-Forwarded-For` header, and OpenShort accepts the header only from proxies it trusts. Otherwise any client could pretend to be someone else.
+
+Out of the box only the Nginx bundled in the container is trusted. When you put your own reverse proxy in front of OpenShort, declare it with the `TRUSTED_PROXIES` environment variable:
+
+```yaml
+environment:
+  - TRUSTED_PROXIES=172.16.0.0/12
+```
+
+- The value is a comma-separated list of IP addresses or CIDR networks, for example `10.0.0.5,172.16.0.0/12`. Host names are not supported, and an invalid value stops the application at startup.
+- Declare the address OpenShort sees the proxy connecting from. For a proxy running on the Docker host this is usually the gateway of the Docker network (for example `172.17.0.1`); for a proxy running in another container it is the address of that container on the shared network. `docker network inspect <network>` shows both.
+- Your proxy must add the client address to `X-Forwarded-For`, as in the example above. Caddy and Traefik do it by default.
+- Declare only proxies you control: every declared address is allowed to choose the client IP address.
+- Publish the OpenShort ports only to your proxy when possible (for example `127.0.0.1:8080:8080`), so that nobody else can connect from a trusted address.
+
+If you skip this setting OpenShort keeps working, but it sees every visitor with the IP address of your proxy. Login attempts are then limited for all visitors together: repeated wrong passwords from anyone slow down everyone, including you.
 
 #### SSL certificates
 

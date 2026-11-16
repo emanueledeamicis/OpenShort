@@ -344,8 +344,8 @@ All environment variables can be configured directly inside the `environment:` s
 - ASPNETCORE_ENVIRONMENT=Production
 - ADMIN_PASSWORD_RESET=temporary_emergency_password
 
-# Optional: reverse proxies allowed to report the client IP address
-- TRUSTED_PROXIES=172.16.0.0/12
+# Optional: reverse proxies allowed to report the client IP address (see "Trusted proxies")
+- TRUSTED_PROXIES=172.30.0.1
 ```
 
 > **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (for example, `Password$$` becomes `Password$$$$`) so Docker does not interpret them as variables.
@@ -409,20 +409,48 @@ server {
 
 OpenShort uses the client IP address to limit login attempts. A reverse proxy reports that address in the `X-Forwarded-For` header, and OpenShort accepts the header only from proxies it trusts. Otherwise any client could pretend to be someone else.
 
-Out of the box only the Nginx bundled in the container is trusted. When you put your own reverse proxy in front of OpenShort, declare it with the `TRUSTED_PROXIES` environment variable:
+Out of the box only the Nginx bundled in the container is trusted. When you put your own reverse proxy in front of OpenShort, declare it with the `TRUSTED_PROXIES` environment variable.
+
+Without this setting OpenShort ignores every `X-Forwarded-*` header sent by your proxy:
+
+- It sees every visitor with the IP address of your proxy. Login attempts are then limited for all visitors together: repeated wrong passwords from anyone slow down everyone, including you.
+- If your proxy replaces the `Host` header and sends the original domain in `X-Forwarded-Host`, short links stop resolving and show the "link not found" page. The Nginx example above is not affected, because it forwards `Host`.
+
+**Which address to declare.** Declare the address OpenShort sees your proxy connecting from. When forwarded headers arrive from an address that is not trusted, OpenShort writes it in a warning in the container logs (`Ignored forwarded headers received from ...`): start without the setting, send one request through your proxy and read the address there.
+
+- For a proxy running on the Docker host it is usually the gateway of the Docker network.
+- For a proxy running in another container it is the address of that container on the shared network.
+- If there are more proxies in a row, for example a CDN in front of your proxy, declare each of them. Otherwise visitors are seen with the address of the first undeclared one.
+
+**Example: proxy running on the Docker host.** Give the Docker network a fixed subnet, so the gateway address does not change, and publish the ports only on `127.0.0.1`:
 
 ```yaml
-environment:
-  - TRUSTED_PROXIES=172.16.0.0/12
+services:
+  openshort:
+    ports:
+      - "127.0.0.1:8081:8081"
+      - "127.0.0.1:8080:8080"
+    environment:
+      - TRUSTED_PROXIES=172.30.0.1
+    networks:
+      - openshort
+
+networks:
+  openshort:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
 ```
 
-- The value is a comma-separated list of IP addresses or CIDR networks, for example `10.0.0.5,172.16.0.0/12`. Host names are not supported, and an invalid value stops the application at startup.
-- Declare the address OpenShort sees the proxy connecting from. For a proxy running on the Docker host this is usually the gateway of the Docker network (for example `172.17.0.1`); for a proxy running in another container it is the address of that container on the shared network. `docker network inspect <network>` shows both.
-- Your proxy must add the client address to `X-Forwarded-For`, as in the example above. Caddy and Traefik do it by default.
-- Declare only proxies you control: every declared address is allowed to choose the client IP address.
-- Publish the OpenShort ports only to your proxy when possible (for example `127.0.0.1:8080:8080`), so that nobody else can connect from a trusted address.
+Your proxy then forwards to `http://127.0.0.1:8080` (API and short links) and `http://127.0.0.1:8081` (dashboard).
 
-If you skip this setting OpenShort keeps working, but it sees every visitor with the IP address of your proxy. Login attempts are then limited for all visitors together: repeated wrong passwords from anyone slow down everyone, including you.
+**Rules for the value.**
+
+- It is a comma-separated list of IP addresses or CIDR networks, for example `172.30.0.1,10.0.0.0/24`. Host names are not supported, and an invalid value stops the application at startup.
+- Every declared address can choose the IP address it is seen with. Declare single addresses of proxies you control, and avoid wide networks such as `172.16.0.0/12`: they also cover other containers and machines.
+- Nobody else must be able to connect from a declared address. When you declare the Docker gateway, publishing the ports only on `127.0.0.1` (or closing them with a firewall) is required: with Docker Desktop and rootless Docker every connection to a published port comes from the gateway, and on Linux some do as well.
+- Your proxy must add the client address to `X-Forwarded-For`, as in the Nginx example above. Caddy and Traefik do it by default.
 
 #### SSL certificates
 

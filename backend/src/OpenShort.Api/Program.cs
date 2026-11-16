@@ -135,9 +135,10 @@ builder.Services.AddAuthorization(options =>
 });
 
 // Forwarded headers are accepted only from the bundled Nginx (loopback) and from the declared reverse proxies
-var trustedProxies = builder.Configuration[OpenShort.Api.Auth.TrustedProxies.ConfigurationKey];
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-    OpenShort.Api.Auth.TrustedProxies.Configure(options, trustedProxies));
+// Parsed here so that an invalid value stops the startup before anything else happens
+var trustedProxies = OpenShort.Api.Auth.TrustedProxies.Parse(
+    builder.Configuration[OpenShort.Api.Auth.TrustedProxies.ConfigurationKey]);
+builder.Services.Configure<ForwardedHeadersOptions>(trustedProxies.Configure);
 
 builder.Services.AddIdentityCore<AppUser>(OpenShort.Api.Auth.AuthProtection.ConfigureIdentity)
     .AddRoles<IdentityRole>()
@@ -189,15 +190,20 @@ var app = builder.Build();
 
 app.Logger.LogInformation("Using database provider: {Database}", databaseDescription);
 
-var declaredProxies = OpenShort.Api.Auth.TrustedProxies.ParseEntries(trustedProxies);
 app.Logger.LogInformation(
     "Forwarded headers are trusted from loopback and from: {TrustedProxies}",
-    declaredProxies.Count > 0 ? string.Join(", ", declaredProxies) : "(no other proxy declared)");
+    trustedProxies.Entries.Count > 0 ? string.Join(", ", trustedProxies.Entries) : "(no other proxy declared)");
+if (trustedProxies.TrustsEveryAddress)
+{
+    app.Logger.LogWarning(
+        "{ConfigurationKey} trusts every address: any client can choose the IP address it is seen with",
+        OpenShort.Api.Auth.TrustedProxies.ConfigurationKey);
+}
 
 // Configure the HTTP request pipeline.
 
 // Critical: Process Forwarded Headers (X-Forwarded-For, X-Forwarded-Proto) from trusted proxies
-app.UseForwardedHeaders();
+OpenShort.Api.Auth.TrustedProxies.Use(app);
 
 // Global Exception Handler - returns RFC 7807 for unhandled exceptions
 app.UseExceptionHandler(); 

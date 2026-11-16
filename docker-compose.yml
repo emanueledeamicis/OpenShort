@@ -12,8 +12,8 @@ services:
       # - MYSQL_PASSWORD=openshort_password
       # --- Security (Optional: Auto-generated if omitted) ---
       # - JWT_SECRET_KEY=ChangeMeToASecureRandomKeyAtLeast32CharsLong
-      # --- Reverse proxy (Set it when a reverse proxy sits in front of OpenShort) ---
-      # - TRUSTED_PROXIES=172.16.0.0/12
+      # --- Reverse proxy (Set it when a reverse proxy sits in front of OpenShort, see README) ---
+      # - TRUSTED_PROXIES=172.30.0.1
     ports:
       - "8081:8081" # Dashboard (Frontend)
       - "80:8080" # API and Redirects (Backend)

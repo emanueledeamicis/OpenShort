@@ -15,7 +15,7 @@ var databaseProvider = builder.Configuration["DatabaseProvider"];
 
 // Check for individual MYSQL_ configurations from Environment, User Secrets, or appsettings
 var mysqlHost = builder.Configuration["MYSQL_HOST"];
-if (!string.IsNullOrEmpty(mysqlHost))
+if (!string.IsNullOrWhiteSpace(mysqlHost))
 {
     // The values are escaped by the factory: they are never concatenated into the connection string
     connectionString = MySqlConnectionStringFactory.Create(

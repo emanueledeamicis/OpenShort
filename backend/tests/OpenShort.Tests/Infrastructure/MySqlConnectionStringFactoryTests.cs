@@ -105,7 +105,36 @@ public class MySqlConnectionStringFactoryTests
         result.AllowLoadLocalInfile.Should().BeFalse();
     }
 
+    [Test]
+    public void Create_ShouldDropSpacesAroundHostDatabaseAndUser_ButNotAroundThePassword()
+    {
+        // Act
+        var result = Parse(MySqlConnectionStringFactory.Create(" db.internal ", " 3307 ", " shortener ", " app ", " S3cr3t!Pass "));
+
+        // Assert
+        result.Server.Should().Be("db.internal");
+        result.Port.Should().Be(3307);
+        result.Database.Should().Be("shortener");
+        result.UserID.Should().Be("app");
+        result.Password.Should().Be(" S3cr3t!Pass ");
+    }
+
+    [Test]
+    public void Create_ShouldTakeQuotesAroundAValueLiterally()
+    {
+        // Act: Docker Compose passes the quotes of `- MYSQL_USER="app"` to the container as they are
+        var result = Parse(MySqlConnectionStringFactory.Create("\"db.internal\"", "3306", "'shortener'", "\"app\"", "\"secret\""));
+
+        // Assert
+        result.Server.Should().Be("\"db.internal\"");
+        result.Database.Should().Be("'shortener'");
+        result.UserID.Should().Be("\"app\"");
+        result.Password.Should().Be("\"secret\"");
+    }
+
     [TestCase("abc")]
+    [TestCase("\"3307\"")]
+    [TestCase("+3307")]
     [TestCase("3306;SslMode=Required")]
     [TestCase("0")]
     [TestCase("-1")]

@@ -5,8 +5,10 @@ namespace OpenShort.Infrastructure.Data;
 
 /// <summary>
 /// Builds the MySQL connection string from the individual MYSQL_* settings.
-/// Every value is escaped, so a password containing ';', '=' or quotes reaches the server unchanged
-/// and cannot add or replace other connection options.
+/// Every value is escaped, so a password containing ';', '=' or quotes reaches the server as it is written
+/// and cannot add or replace other connection options. Values are taken literally: quotes around a value
+/// are part of it. Spaces around host, port, database and user are dropped, because they are never meant;
+/// the password is left untouched.
 /// </summary>
 public static class MySqlConnectionStringFactory
 {
@@ -20,10 +22,10 @@ public static class MySqlConnectionStringFactory
     {
         var builder = new MySqlConnectionStringBuilder
         {
-            Server = host,
+            Server = host.Trim(),
             Port = ParsePort(port),
-            Database = string.IsNullOrWhiteSpace(database) ? DefaultDatabase : database,
-            UserID = string.IsNullOrWhiteSpace(user) ? DefaultUser : user,
+            Database = string.IsNullOrWhiteSpace(database) ? DefaultDatabase : database.Trim(),
+            UserID = string.IsNullOrWhiteSpace(user) ? DefaultUser : user.Trim(),
             Password = password ?? string.Empty,
             SslMode = MySqlSslMode.None
         };

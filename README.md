@@ -354,6 +354,8 @@ All environment variables can be configured directly inside the `environment:` s
 
 > **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (for example, `Password$$` becomes `Password$$$$`) so Docker does not interpret them as variables.
 
+> **Note:** The `MYSQL_*` values are used exactly as written, so a password can contain any character. Do not put quotes around them: in `- MYSQL_PASSWORD="secret"` the quotes become part of the password. To set other connection options, pass a full connection string in `ConnectionStrings__DefaultConnection` instead of the `MYSQL_*` variables.
+
 ### Admin Password Recovery
 
 If you lose the admin password in a self-hosted deployment, you can reset it at container startup with the optional `ADMIN_PASSWORD_RESET` environment variable.

@@ -106,7 +106,7 @@ public class UsersControllerTests
                 new IdentityError
                 {
                     Code = "LastAdminDeletionForbidden",
-                    Description = "You cannot delete the last remaining admin user."
+                    Description = "You cannot delete the last admin user who can sign in."
                 }
             }));
 

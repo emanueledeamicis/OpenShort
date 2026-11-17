@@ -261,6 +261,56 @@ public class AuthControllerLoginTests
     }
 
     [Test]
+    public async Task SetupAdmin_ShouldReturnConflict_WhenAnotherAdministratorCanSignIn()
+    {
+        // Arrange: the setting says the setup is required, but an administrator with a password exists
+        var admin = await _userManager.FindByNameAsync(UserName);
+        (await _userManager.RemovePasswordAsync(admin!)).Succeeded.Should().BeTrue();
+        await CreateAdministratorAsync("second@example.com", Password);
+        _settingServiceMock
+            .Setup(service => service.GetSettingAsync(It.IsAny<string>(), true))
+            .ReturnsAsync(true);
+
+        // Act
+        var result = await _controller.SetupAdmin(new SetupAdminRequest
+        {
+            Password = WrongPassword,
+            ConfirmPassword = WrongPassword
+        });
+
+        // Assert
+        result.Result.Should().BeOfType<ConflictObjectResult>();
+        (await _userManager.HasPasswordAsync(admin!)).Should().BeFalse();
+        _tokenServiceMock.Verify(
+            service => service.CreateTokenAsync(It.IsAny<AppUser>(), It.IsAny<IList<string>>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task SetupAdmin_ShouldSucceed_WhenTheOnlyOtherAdministratorHasNoPassword()
+    {
+        // Arrange
+        var admin = await _userManager.FindByNameAsync(UserName);
+        (await _userManager.RemovePasswordAsync(admin!)).Succeeded.Should().BeTrue();
+        await CreateAdministratorAsync("second@example.com", password: null);
+        _settingServiceMock
+            .Setup(service => service.GetSettingAsync(It.IsAny<string>(), true))
+            .ReturnsAsync(true);
+        SetClientAddress(OwnerAddress);
+
+        // Act
+        var result = await _controller.SetupAdmin(new SetupAdminRequest
+        {
+            Password = Password,
+            ConfirmPassword = Password
+        });
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        (await _userManager.CheckPasswordAsync(admin!, Password)).Should().BeTrue();
+    }
+
+    [Test]
     public async Task Login_ShouldNotLockTheAccountInTheDatabase_AfterRepeatedFailures()
     {
         // Act
@@ -315,6 +365,22 @@ public class AuthControllerLoginTests
 
         // Assert
         attribute.PolicyName.Should().Be(AuthProtection.RateLimitPolicy);
+    }
+
+    private async Task CreateAdministratorAsync(string email, string? password)
+    {
+        var roleManager = _serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        if (!await roleManager.RoleExistsAsync("Admin"))
+        {
+            (await roleManager.CreateAsync(new IdentityRole("Admin"))).Succeeded.Should().BeTrue();
+        }
+
+        var user = new AppUser { UserName = email, Email = email, CreatedAt = DateTime.UtcNow };
+        var createResult = password == null
+            ? await _userManager.CreateAsync(user)
+            : await _userManager.CreateAsync(user, password);
+        createResult.Succeeded.Should().BeTrue();
+        (await _userManager.AddToRoleAsync(user, "Admin")).Succeeded.Should().BeTrue();
     }
 
     private Task<ActionResult<AuthResponse>> LoginAsync(

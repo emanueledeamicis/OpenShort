@@ -16,7 +16,7 @@ public class UsersController : ControllerBase
     private const string UserNotFoundErrorCode = "NotFound";
     private const string LastAdminDeletionForbiddenErrorCode = "LastAdminDeletionForbidden";
     private const string UserNotFoundMessage = "User not found.";
-    private const string LastAdminDeletionForbiddenMessage = "You cannot delete the last remaining admin user.";
+    private const string LastAdminDeletionForbiddenMessage = "You cannot delete the last admin user who can sign in.";
     private const string CurrentUserDeletionForbiddenMessage = "You cannot delete the currently signed-in user.";
     private const string UnexpectedUserCreateErrorMessage = "An unexpected error occurred while creating the user.";
     private const string UnexpectedUserDeleteErrorMessage = "An unexpected error occurred while deleting the user.";

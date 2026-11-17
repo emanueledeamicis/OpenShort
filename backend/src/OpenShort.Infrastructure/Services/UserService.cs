@@ -9,7 +9,7 @@ public class UserService : IUserService
     private const string UserNotFoundErrorCode = "NotFound";
     private const string UserNotFoundErrorDescription = "User not found.";
     private const string LastAdminDeletionForbiddenErrorCode = "LastAdminDeletionForbidden";
-    private const string LastAdminDeletionForbiddenErrorDescription = "You cannot delete the last remaining admin user.";
+    private const string LastAdminDeletionForbiddenErrorDescription = "You cannot delete the last admin user who can sign in.";
 
     private readonly UserManager<AppUser> _userManager;
 
@@ -75,8 +75,9 @@ public class UserService : IUserService
             });
         }
 
-        var adminUsers = await _userManager.GetUsersInRoleAsync(DatabaseInitializer.AdminRoleName);
-        if (adminUsers.Count <= 1)
+        // An administrator without a password cannot sign in, so it does not count as a remaining one
+        var remainingAdmins = await AdminAccounts.GetAbleToSignInAsync(_userManager);
+        if (remainingAdmins.All(admin => admin.Id == user.Id))
         {
             return (false, new []
             {

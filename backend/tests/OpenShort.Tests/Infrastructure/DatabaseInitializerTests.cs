@@ -25,6 +25,8 @@ public class DatabaseInitializerTests
     private const string ResetVariable = "ADMIN_PASSWORD_RESET";
     private const string CurrentPassword = "CurrentPass123!";
     private const string NewPassword = "Temporary-Passw0rd";
+    private const string OtherAdminEmail = "owner@example.com";
+    private const string OtherAdminPassword = "OwnerPass123!";
 
     private SqliteConnection _connection = null!;
     private RecordingLoggerProvider _loggerProvider = null!;
@@ -240,6 +242,201 @@ public class DatabaseInitializerTests
         error.Message.Should().Contain("unchanged");
         error.Message.Should().Contain(RejectingUserValidator.ErrorDescription);
     }
+
+    [Test]
+    public async Task Initialize_ShouldNotRecreateAdminNorReopenSetup_WhenAdminWasDeletedAndAnotherAdministratorExists()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(resetPassword: null);
+        await StartAsync(resetPassword: null);
+
+        // Assert
+        (await AdminExistsAsync()).Should().BeFalse();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+        (await CheckPasswordAsync(OtherAdminEmail, OtherAdminPassword)).Should().BeTrue();
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+        _loggerProvider.Entries
+            .Where(entry => entry.Message.Contains("default admin user was deleted and is not created again"))
+            .Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task Initialize_ShouldCloseSetup_WhenAdminHasNoPasswordButAnotherAdministratorHasOne()
+    {
+        // Arrange: the state left by the previous versions, which created the deleted admin again
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        await RecreateAdminWithoutPasswordAsync();
+
+        // Act
+        await StartAsync(resetPassword: null);
+
+        // Assert
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+        (await AdminHasPasswordAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRecreateAdminWithPassword_WhenAdminWasDeletedAndResetPasswordIsValid()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+        (await WithAdminAsync((userManager, admin) => userManager.IsInRoleAsync(admin, DatabaseInitializer.AdminRoleName))).Should().BeTrue();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+    }
+
+    // A rejected recovery must not create an admin without a password, which anyone could then claim
+    [TestCase("temporary_emergency_password", TestName = "{m}(Password not valid)")]
+    [TestCase(" Temporary-Passw0rd", TestName = "{m}(Leading space)")]
+    [TestCase("Temporary-Passw0rd ", TestName = "{m}(Trailing space)")]
+    public async Task Initialize_ShouldNotRecreateAdmin_WhenAdminWasDeletedAndResetPasswordIsRejected(string rejectedPassword)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(rejectedPassword);
+
+        // Assert
+        (await AdminExistsAsync()).Should().BeFalse();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+        var error = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain(ResetVariable);
+        error.Message.Should().NotContain(rejectedPassword.Trim());
+    }
+
+    [Test]
+    public async Task Initialize_ShouldNotRecreateAdmin_WhenAdminWasDeletedAndResetPasswordIsBlank()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+
+        // Act
+        await StartAsync("   ");
+
+        // Assert
+        (await AdminExistsAsync()).Should().BeFalse();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRecreateAdminAtEveryStart_WhileAValidResetPasswordIsSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        await StartAsync(NewPassword);
+        await DeleteDefaultAdminAsync();
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRequireSetup_WhenTheOnlyOtherAdministratorHasNoPassword()
+    {
+        // Arrange: nobody can sign in, so the setup is the only way in
+        await StartAsync(resetPassword: null);
+        await WithScopeAsync(async services =>
+        {
+            var userManager = services.GetRequiredService<UserManager<AppUser>>();
+            var other = new AppUser { UserName = OtherAdminEmail, Email = OtherAdminEmail, CreatedAt = DateTime.UtcNow };
+            (await userManager.CreateAsync(other)).Succeeded.Should().BeTrue();
+            (await userManager.AddToRoleAsync(other, DatabaseInitializer.AdminRoleName)).Succeeded.Should().BeTrue();
+            var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
+            (await userManager.DeleteAsync(admin!)).Succeeded.Should().BeTrue();
+            return true;
+        });
+
+        // Act
+        await StartAsync(resetPassword: null);
+
+        // Assert
+        (await AdminExistsAsync()).Should().BeTrue();
+        (await IsSetupRequiredAsync()).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRequireSetup_WhenAUserWithPasswordIsNotAnAdministrator()
+    {
+        // Arrange
+        await StartAsync(resetPassword: null);
+        await WithScopeAsync(async services =>
+        {
+            var userManager = services.GetRequiredService<UserManager<AppUser>>();
+            var other = new AppUser { UserName = OtherAdminEmail, Email = OtherAdminEmail, CreatedAt = DateTime.UtcNow };
+            (await userManager.CreateAsync(other, OtherAdminPassword)).Succeeded.Should().BeTrue();
+            return true;
+        });
+
+        // Act
+        await StartAsync(resetPassword: null);
+
+        // Assert
+        (await IsSetupRequiredAsync()).Should().BeTrue();
+    }
+
+    // Same steps as the dashboard: create a second administrator, then delete the default one
+    private Task CreateOtherAdminAndDeleteDefaultAdminAsync() => WithScopeAsync(async services =>
+    {
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+        var userService = new UserService(userManager);
+        var (otherAdmin, _) = await userService.CreateAdminAsync(OtherAdminEmail, OtherAdminPassword);
+        otherAdmin.Should().NotBeNull();
+
+        var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
+        var (deleted, _) = await userService.DeleteAdminAsync(admin!.Id);
+        deleted.Should().BeTrue();
+        return true;
+    });
+
+    private Task DeleteDefaultAdminAsync() => WithScopeAsync(async services =>
+    {
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+        var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
+        var (deleted, _) = await new UserService(userManager).DeleteAdminAsync(admin!.Id);
+        deleted.Should().BeTrue();
+        return true;
+    });
+
+    private Task RecreateAdminWithoutPasswordAsync() => WithScopeAsync(async services =>
+    {
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+        var admin = new AppUser { UserName = DatabaseInitializer.AdminUserName, EmailConfirmed = true, CreatedAt = DateTime.UtcNow };
+        (await userManager.CreateAsync(admin)).Succeeded.Should().BeTrue();
+        (await userManager.AddToRoleAsync(admin, DatabaseInitializer.AdminRoleName)).Succeeded.Should().BeTrue();
+        await services.GetRequiredService<ISettingService>()
+            .SetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, "true");
+        return true;
+    });
+
+    private Task<bool> AdminExistsAsync() => WithScopeAsync(async services =>
+        await services.GetRequiredService<UserManager<AppUser>>().FindByNameAsync(DatabaseInitializer.AdminUserName) != null);
+
+    private Task<bool> CheckPasswordAsync(string userName, string password) => WithScopeAsync(async services =>
+    {
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+        var user = await userManager.FindByNameAsync(userName);
+        return user != null && await userManager.CheckPasswordAsync(user, password);
+    });
 
     private async Task StartWithAdminPasswordAsync(string password)
     {

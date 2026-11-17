@@ -10,29 +10,29 @@ const loginRoute = '/login';
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
     const authService = inject(AuthService);
     const router = inject(Router);
+
+    // Null when there is no token or when it has expired
     const token = authService.getToken();
 
-    if (!token) {
-        return next(req);
-    }
+    const request = token
+        ? req.clone({
+            setHeaders: {
+                Authorization: `Bearer ${token}`
+            }
+        })
+        : req;
 
-    const cloned = req.clone({
-        setHeaders: {
-            Authorization: `Bearer ${token}`
-        }
-    });
-
-    return next(cloned).pipe(
+    return next(request).pipe(
         tap({
             error: (error: unknown) => {
-                // On the login call a 401 means wrong credentials, not a rejected session
+                // On the login call a 401 means wrong credentials, not a session that ended
                 if (!(error instanceof HttpErrorResponse) || error.status !== 401 || req.url.endsWith(loginUrl)) {
                     return;
                 }
 
-                // The backend no longer accepts this token: the session is over.
-                // Several calls can fail together: only the first one signs out,
-                // and a token obtained in the meantime is left alone.
+                // The session is over: the backend rejected the token, or the token had already expired
+                // and the call was sent without it. Several calls can fail together: only the first one
+                // signs out, and a token obtained in the meantime is left alone.
                 if (authService.getToken() !== token) {
                     return;
                 }

@@ -84,6 +84,7 @@ export class LoginComponent implements OnInit {
         this.loading = false;
         this.isInitialSetupRequired = false;
         this.cdr.detectChanges();
+        this.authService.redirectUrl = null;
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {

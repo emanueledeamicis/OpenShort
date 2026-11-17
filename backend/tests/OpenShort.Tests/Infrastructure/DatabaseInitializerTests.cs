@@ -1,0 +1,297 @@
+using FluentAssertions;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Moq;
+using OpenShort.Api.Auth;
+using OpenShort.Core.Entities;
+using OpenShort.Core.Interfaces;
+using OpenShort.Infrastructure.Data;
+using OpenShort.Infrastructure.Services;
+
+namespace OpenShort.Tests.Infrastructure;
+
+/// <summary>
+/// Admin password recovery tests. Each call to <see cref="StartAsync"/> behaves like an application start:
+/// it runs the real initializer, with the real migrations and Identity configuration, on a database that
+/// lives as long as the test.
+/// </summary>
+[TestFixture]
+public class DatabaseInitializerTests
+{
+    private const string ResetVariable = "ADMIN_PASSWORD_RESET";
+    private const string CurrentPassword = "CurrentPass123!";
+    private const string NewPassword = "Temporary-Passw0rd";
+
+    private SqliteConnection _connection = null!;
+    private RecordingLoggerProvider _loggerProvider = null!;
+
+    [SetUp]
+    public void Setup()
+    {
+        // An in-memory SQLite database exists for as long as its connection stays open
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+        _loggerProvider = new RecordingLoggerProvider();
+    }
+
+    [TearDown]
+    public void TearDown()
+    {
+        _loggerProvider.Dispose();
+        _connection.Dispose();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRequireSetup_WhenAdminHasNoPassword()
+    {
+        // Act
+        await StartAsync(resetPassword: null);
+
+        // Assert
+        (await IsSetupRequiredAsync()).Should().BeTrue();
+        (await AdminHasPasswordAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldReplacePassword_WhenResetPasswordIsValid()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeFalse();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldSetPasswordAndCloseSetup_WhenResetPasswordIsValidAndAdminHasNoPassword()
+    {
+        // Arrange
+        await StartAsync(resetPassword: null);
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldChangeSecurityStamp_WhenResetPasswordIsValid()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        var stampBefore = await GetAdminSecurityStampAsync();
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        (await GetAdminSecurityStampAsync()).Should().NotBe(stampBefore);
+    }
+
+    // One case per rule of the password policy, plus the example the README used to suggest
+    [TestCase("Aa1!aaa", TestName = "Too short")]
+    [TestCase("lowercase-passw0rd", TestName = "No uppercase letter")]
+    [TestCase("UPPERCASE-PASSW0RD", TestName = "No lowercase letter")]
+    [TestCase("Temporary-Password", TestName = "No digit")]
+    [TestCase("TemporaryPassw0rd", TestName = "No symbol")]
+    [TestCase("temporary_emergency_password", TestName = "Former README example")]
+    public async Task Initialize_ShouldKeepCurrentPassword_WhenResetPasswordIsInvalid(string invalidPassword)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+
+        // Act
+        await StartAsync(invalidPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeTrue();
+        (await CheckAdminPasswordAsync(invalidPassword)).Should().BeFalse();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldNotReopenSetup_WhenResetPasswordIsInvalidAndApplicationRestarts()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await StartAsync("temporary_emergency_password");
+
+        // Act: the next start, with the variable still set and then removed
+        await StartAsync("temporary_emergency_password");
+        await StartAsync(resetPassword: null);
+
+        // Assert
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldLogErrorWithUnmetRules_WhenResetPasswordIsInvalid()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync("temporary_emergency_password");
+
+        // Assert
+        var error = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain(ResetVariable);
+        error.Message.Should().Contain("unchanged");
+        error.Message.Should().Contain("uppercase");
+        error.Message.Should().Contain("digit");
+        error.Message.Should().NotContain("temporary_emergency_password");
+    }
+
+    [Test]
+    public async Task Initialize_ShouldNotLogThePassword_WhenResetPasswordIsValid()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Message.Contains(NewPassword));
+    }
+
+    [Test]
+    public async Task Initialize_ShouldKeepSetupRequired_WhenResetPasswordIsInvalidAndAdminHasNoPassword()
+    {
+        // Arrange
+        await StartAsync(resetPassword: null);
+
+        // Act
+        await StartAsync("temporary_emergency_password");
+
+        // Assert
+        (await AdminHasPasswordAsync()).Should().BeFalse();
+        (await IsSetupRequiredAsync()).Should().BeTrue();
+    }
+
+    [TestCase("")]
+    [TestCase("   ")]
+    public async Task Initialize_ShouldKeepCurrentPassword_WhenResetPasswordIsBlank(string blankPassword)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+
+        // Act
+        await StartAsync(blankPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeTrue();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+    }
+
+    private async Task StartWithAdminPasswordAsync(string password)
+    {
+        await StartAsync(resetPassword: null);
+
+        // Same steps as the initial setup endpoint
+        await using var provider = BuildProvider(resetPassword: null);
+        using var scope = provider.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
+        (await userManager.AddPasswordAsync(admin!, password)).Succeeded.Should().BeTrue();
+        await scope.ServiceProvider.GetRequiredService<ISettingService>()
+            .SetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, "false");
+    }
+
+    private async Task StartAsync(string? resetPassword)
+    {
+        await using var provider = BuildProvider(resetPassword);
+        using var scope = provider.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
+    }
+
+    private Task<bool> IsSetupRequiredAsync() => WithScopeAsync(services =>
+        services.GetRequiredService<ISettingService>().GetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, true));
+
+    private Task<bool> AdminHasPasswordAsync() => WithAdminAsync((userManager, admin) => userManager.HasPasswordAsync(admin));
+
+    private Task<bool> CheckAdminPasswordAsync(string password) =>
+        WithAdminAsync((userManager, admin) => userManager.CheckPasswordAsync(admin, password));
+
+    private Task<string> GetAdminSecurityStampAsync() =>
+        WithAdminAsync((userManager, admin) => userManager.GetSecurityStampAsync(admin));
+
+    private Task<T> WithAdminAsync<T>(Func<UserManager<AppUser>, AppUser, Task<T>> read) => WithScopeAsync(async services =>
+    {
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+        var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
+        admin.Should().NotBeNull();
+        return await read(userManager, admin!);
+    });
+
+    private async Task<T> WithScopeAsync<T>(Func<IServiceProvider, Task<T>> read)
+    {
+        await using var provider = BuildProvider(resetPassword: null);
+        using var scope = provider.CreateScope();
+        return await read(scope.ServiceProvider);
+    }
+
+    // Same registrations as Program.cs for the services the initializer uses
+    private ServiceProvider BuildProvider(string? resetPassword)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [ResetVariable] = resetPassword })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging(logging => logging.SetMinimumLevel(LogLevel.Information).AddProvider(_loggerProvider));
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddDbContext<AppDbContext, SqliteDbContext>(options => options.UseSqlite(_connection));
+        services.AddIdentityCore<AppUser>(AuthProtection.ConfigureIdentity)
+            .AddRoles<IdentityRole>()
+            .AddEntityFrameworkStores<AppDbContext>();
+        services.AddScoped<ISettingService, SettingService>();
+        services.AddSingleton(new Mock<IJwtKeyProvider>().Object);
+        services.AddScoped<DatabaseInitializer>();
+        return services.BuildServiceProvider();
+    }
+
+    private sealed record LogEntry(LogLevel Level, string Message);
+
+    private sealed class RecordingLoggerProvider : ILoggerProvider
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(categoryName, Entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class RecordingLogger(string categoryName, List<LogEntry> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            // Only the initializer is recorded: Entity Framework logs its own commands
+            public bool IsEnabled(LogLevel logLevel) => categoryName == typeof(DatabaseInitializer).FullName;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                if (IsEnabled(logLevel))
+                {
+                    entries.Add(new LogEntry(logLevel, formatter(state, exception)));
+                }
+            }
+        }
+    }
+}

@@ -342,7 +342,7 @@ All environment variables can be configured directly inside the `environment:` s
 
 # Security
 - ASPNETCORE_ENVIRONMENT=Production
-- ADMIN_PASSWORD_RESET=temporary_emergency_password
+- ADMIN_PASSWORD_RESET=Temporary-Passw0rd
 
 # Optional: reverse proxies allowed to report the client IP address (see "Trusted proxies")
 - TRUSTED_PROXIES=172.30.0.1
@@ -354,10 +354,12 @@ All environment variables can be configured directly inside the `environment:` s
 
 If you lose the admin password in a self-hosted deployment, you can reset it at container startup with the optional `ADMIN_PASSWORD_RESET` environment variable.
 
-1. Add `ADMIN_PASSWORD_RESET=your_new_temporary_password` to the OpenShort container environment.
+1. Add `ADMIN_PASSWORD_RESET=Your-New-Passw0rd` to the OpenShort container environment.
 2. Restart the container.
 3. Sign in with username `admin` and the new password.
 4. Remove the environment variable from your deployment after the reset is complete.
+
+The new password must follow the same rules as any other password: at least 8 characters, with an uppercase letter, a lowercase letter, a digit and a symbol. If it does not, the current password is left unchanged and the container logs report the error (`ADMIN_PASSWORD_RESET was not applied ...`) with the rules that were not met.
 
 ### JWT Secret Key
 

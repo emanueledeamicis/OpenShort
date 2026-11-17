@@ -26,8 +26,8 @@ public class DatabaseInitializer
     private const string AdminSeedFailedMessage = "Failed to seed admin user: {Errors}";
     private const string AdminRoleSeedFailedMessage = "Failed to seed admin role: {Errors}";
     private const string AdminRoleAssignmentFailedMessage = "Failed to assign admin role to bootstrap user: {Errors}";
-    private const string AdminPasswordResetSurroundingSpacesMessage = "{Variable} was not applied because the value starts or ends with a space, the admin password is unchanged. Remove the spaces around the value.";
-    private const string AdminPasswordResetRejectedMessage = "{Variable} was not applied because the new password is not valid, the admin password is unchanged: {Errors}";
+    private const string AdminPasswordResetSurroundingSpacesMessage = "{Variable} was not applied because the value starts or ends with a space, the admin account is unchanged. Remove the spaces around the value.";
+    private const string AdminPasswordResetRejectedMessage = "{Variable} was not applied because the new password is not valid, the admin account is unchanged: {Errors}";
     private const string AdminPasswordResetFailedMessage = "Failed to apply bootstrap admin password reset, the admin password is unchanged: {Errors}";
     private const string AdminPasswordResetCompletedMessage = "Bootstrap admin password reset completed successfully.";
     private const string AdminUserNotRecreatedMessage = "The default admin user was deleted and is not created again: another administrator can sign in.";
@@ -120,12 +120,18 @@ public class DatabaseInitializer
     {
         var resetPassword = _configuration[AdminPasswordResetEnvironmentVariable];
         var adminUser = await _userManager.FindByNameAsync(AdminUserName);
+
+        // Checked before the account is created or touched: a rejected password must not leave
+        // an admin without a password behind
+        var applyPasswordReset = !string.IsNullOrWhiteSpace(resetPassword)
+            && await IsResetPasswordValidAsync(adminUser ?? new AppUser { UserName = AdminUserName }, resetPassword);
+
         if (adminUser == null)
         {
             // The default admin can be deleted when another administrator exists. Creating it again
-            // without a password would open the initial setup to anyone reaching the instance.
-            // It comes back only on request, through the password recovery.
-            if (string.IsNullOrWhiteSpace(resetPassword) && await AnyAdministratorHasPasswordAsync())
+            // without a password would leave an account anyone could claim through the initial setup.
+            // It comes back only on request, through a valid password recovery.
+            if (!applyPasswordReset && await AdminAccounts.AnyAbleToSignInAsync(_userManager))
             {
                 await SetInitialAdminSetupRequiredAsync(false);
                 _logger.LogInformation(AdminUserNotRecreatedMessage);
@@ -157,22 +163,37 @@ public class DatabaseInitializer
         }
 
         // The setup is for an instance nobody can sign in to: with any usable administrator it stays closed
-        await SetInitialAdminSetupRequiredAsync(!await AnyAdministratorHasPasswordAsync());
+        await SetInitialAdminSetupRequiredAsync(!await AdminAccounts.AnyAbleToSignInAsync(_userManager));
 
-        if (string.IsNullOrWhiteSpace(resetPassword))
+        if (!applyPasswordReset)
         {
             return;
         }
 
+        // The new hash replaces the old one in a single save, so there is no moment without a password
+        var previousPasswordHash = adminUser.PasswordHash;
+        adminUser.PasswordHash = _userManager.PasswordHasher.HashPassword(adminUser, resetPassword!);
+        var passwordResult = await _userManager.UpdateSecurityStampAsync(adminUser);
+        if (!passwordResult.Succeeded)
+        {
+            adminUser.PasswordHash = previousPasswordHash;
+            _logger.LogError(AdminPasswordResetFailedMessage, string.Join(", ", passwordResult.Errors.Select(error => error.Description)));
+            return;
+        }
+
+        await SetInitialAdminSetupRequiredAsync(false);
+        _logger.LogInformation(AdminPasswordResetCompletedMessage);
+    }
+
+    private async Task<bool> IsResetPasswordValidAsync(AppUser adminUser, string resetPassword)
+    {
         // Surrounding spaces would become part of the password without anyone noticing
         if (resetPassword != resetPassword.Trim())
         {
             _logger.LogError(AdminPasswordResetSurroundingSpacesMessage, AdminPasswordResetEnvironmentVariable);
-            return;
+            return false;
         }
 
-        // Validated before the account is touched: a rejected password must not leave the admin without one,
-        // because that would open the initial setup again to anyone reaching the instance
         var validationErrors = new List<IdentityError>();
         foreach (var validator in _userManager.PasswordValidators)
         {
@@ -186,28 +207,10 @@ public class DatabaseInitializer
                 AdminPasswordResetRejectedMessage,
                 AdminPasswordResetEnvironmentVariable,
                 string.Join(" ", validationErrors.Select(error => error.Description)));
-            return;
+            return false;
         }
 
-        // The new hash replaces the old one in a single save, so there is no moment without a password
-        var previousPasswordHash = adminUser.PasswordHash;
-        adminUser.PasswordHash = _userManager.PasswordHasher.HashPassword(adminUser, resetPassword);
-        var passwordResult = await _userManager.UpdateSecurityStampAsync(adminUser);
-        if (!passwordResult.Succeeded)
-        {
-            adminUser.PasswordHash = previousPasswordHash;
-            _logger.LogError(AdminPasswordResetFailedMessage, string.Join(", ", passwordResult.Errors.Select(error => error.Description)));
-            return;
-        }
-
-        await SetInitialAdminSetupRequiredAsync(false);
-        _logger.LogInformation(AdminPasswordResetCompletedMessage);
-    }
-
-    private async Task<bool> AnyAdministratorHasPasswordAsync()
-    {
-        var administrators = await _userManager.GetUsersInRoleAsync(AdminRoleName);
-        return administrators.Any(administrator => !string.IsNullOrEmpty(administrator.PasswordHash));
+        return true;
     }
 
     private Task SetInitialAdminSetupRequiredAsync(bool isRequired) =>

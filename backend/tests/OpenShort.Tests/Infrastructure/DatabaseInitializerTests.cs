@@ -249,6 +249,7 @@ public class DatabaseInitializerTests
         // Arrange
         await StartWithAdminPasswordAsync(CurrentPassword);
         await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        _loggerProvider.Entries.Clear();
 
         // Act
         await StartAsync(resetPassword: null);
@@ -258,6 +259,10 @@ public class DatabaseInitializerTests
         (await AdminExistsAsync()).Should().BeFalse();
         (await IsSetupRequiredAsync()).Should().BeFalse();
         (await CheckPasswordAsync(OtherAdminEmail, OtherAdminPassword)).Should().BeTrue();
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+        _loggerProvider.Entries
+            .Where(entry => entry.Message.Contains("default admin user was deleted and is not created again"))
+            .Should().HaveCount(2);
     }
 
     [Test]
@@ -292,20 +297,57 @@ public class DatabaseInitializerTests
         (await IsSetupRequiredAsync()).Should().BeFalse();
     }
 
+    // A rejected recovery must not create an admin without a password, which anyone could then claim
+    [TestCase("temporary_emergency_password", TestName = "{m}(Password not valid)")]
+    [TestCase(" Temporary-Passw0rd", TestName = "{m}(Leading space)")]
+    [TestCase("Temporary-Passw0rd ", TestName = "{m}(Trailing space)")]
+    public async Task Initialize_ShouldNotRecreateAdmin_WhenAdminWasDeletedAndResetPasswordIsRejected(string rejectedPassword)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(rejectedPassword);
+
+        // Assert
+        (await AdminExistsAsync()).Should().BeFalse();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+        var error = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain(ResetVariable);
+        error.Message.Should().NotContain(rejectedPassword.Trim());
+    }
+
     [Test]
-    public async Task Initialize_ShouldKeepSetupClosed_WhenAdminWasDeletedAndResetPasswordIsInvalid()
+    public async Task Initialize_ShouldNotRecreateAdmin_WhenAdminWasDeletedAndResetPasswordIsBlank()
     {
         // Arrange
         await StartWithAdminPasswordAsync(CurrentPassword);
         await CreateOtherAdminAndDeleteDefaultAdminAsync();
 
-        // Act: the start with the invalid value, then one without the variable
-        await StartAsync("temporary_emergency_password");
-        await StartAsync(resetPassword: null);
+        // Act
+        await StartAsync("   ");
 
         // Assert
+        (await AdminExistsAsync()).Should().BeFalse();
         (await IsSetupRequiredAsync()).Should().BeFalse();
-        (await CheckPasswordAsync(DatabaseInitializer.AdminUserName, "temporary_emergency_password")).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRecreateAdminAtEveryStart_WhileAValidResetPasswordIsSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        await StartAsync(NewPassword);
+        await DeleteDefaultAdminAsync();
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
     }
 
     [Test]
@@ -362,6 +404,15 @@ public class DatabaseInitializerTests
 
         var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
         var (deleted, _) = await userService.DeleteAdminAsync(admin!.Id);
+        deleted.Should().BeTrue();
+        return true;
+    });
+
+    private Task DeleteDefaultAdminAsync() => WithScopeAsync(async services =>
+    {
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+        var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
+        var (deleted, _) = await new UserService(userManager).DeleteAdminAsync(admin!.Id);
         deleted.Should().BeTrue();
         return true;
     });

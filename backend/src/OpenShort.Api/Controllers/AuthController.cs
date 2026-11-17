@@ -131,6 +131,12 @@ public class AuthController : ControllerBase
 
         try
         {
+            // The setting alone is not trusted: the setup is only for an instance nobody can sign in to
+            if (await AdminAccounts.AnyAbleToSignInAsync(_userManager))
+            {
+                return Conflict(new { message = InitialAdminSetupCompletedMessage });
+            }
+
             var adminUser = await _userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
             if (adminUser == null)
             {

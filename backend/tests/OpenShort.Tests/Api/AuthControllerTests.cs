@@ -89,6 +89,9 @@ public class AuthControllerTests
             .Setup(manager => manager.HasPasswordAsync(adminUser))
             .ReturnsAsync(false);
         _userManagerMock
+            .Setup(manager => manager.GetUsersInRoleAsync("Admin"))
+            .ReturnsAsync(new List<AppUser> { adminUser });
+        _userManagerMock
             .Setup(manager => manager.AddPasswordAsync(adminUser, "StrongPass123!"))
             .ReturnsAsync(IdentityResult.Success);
         _userManagerMock

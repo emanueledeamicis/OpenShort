@@ -26,8 +26,9 @@ public class DatabaseInitializer
     private const string AdminSeedFailedMessage = "Failed to seed admin user: {Errors}";
     private const string AdminRoleSeedFailedMessage = "Failed to seed admin role: {Errors}";
     private const string AdminRoleAssignmentFailedMessage = "Failed to assign admin role to bootstrap user: {Errors}";
-    private const string AdminPasswordRemoveFailedMessage = "Failed to remove current admin password during bootstrap reset: {Errors}";
-    private const string AdminPasswordResetFailedMessage = "Failed to apply bootstrap admin password reset: {Errors}";
+    private const string AdminPasswordResetSurroundingSpacesMessage = "{Variable} was not applied because the value starts or ends with a space, the admin password is unchanged. Remove the spaces around the value.";
+    private const string AdminPasswordResetRejectedMessage = "{Variable} was not applied because the new password is not valid, the admin password is unchanged: {Errors}";
+    private const string AdminPasswordResetFailedMessage = "Failed to apply bootstrap admin password reset, the admin password is unchanged: {Errors}";
     private const string AdminPasswordResetCompletedMessage = "Bootstrap admin password reset completed successfully.";
 
     private readonly AppDbContext _context;
@@ -155,20 +156,39 @@ public class DatabaseInitializer
             return;
         }
 
-        if (await _userManager.HasPasswordAsync(adminUser))
+        // Surrounding spaces would become part of the password without anyone noticing
+        if (resetPassword != resetPassword.Trim())
         {
-            var removeResult = await _userManager.RemovePasswordAsync(adminUser);
-            if (!removeResult.Succeeded)
-            {
-                _logger.LogWarning(AdminPasswordRemoveFailedMessage, string.Join(", ", removeResult.Errors.Select(error => error.Description)));
-                return;
-            }
+            _logger.LogError(AdminPasswordResetSurroundingSpacesMessage, AdminPasswordResetEnvironmentVariable);
+            return;
         }
 
-        var passwordResult = await _userManager.AddPasswordAsync(adminUser, resetPassword);
+        // Validated before the account is touched: a rejected password must not leave the admin without one,
+        // because that would open the initial setup again to anyone reaching the instance
+        var validationErrors = new List<IdentityError>();
+        foreach (var validator in _userManager.PasswordValidators)
+        {
+            var validationResult = await validator.ValidateAsync(_userManager, adminUser, resetPassword);
+            validationErrors.AddRange(validationResult.Errors);
+        }
+
+        if (validationErrors.Count > 0)
+        {
+            _logger.LogError(
+                AdminPasswordResetRejectedMessage,
+                AdminPasswordResetEnvironmentVariable,
+                string.Join(" ", validationErrors.Select(error => error.Description)));
+            return;
+        }
+
+        // The new hash replaces the old one in a single save, so there is no moment without a password
+        var previousPasswordHash = adminUser.PasswordHash;
+        adminUser.PasswordHash = _userManager.PasswordHasher.HashPassword(adminUser, resetPassword);
+        var passwordResult = await _userManager.UpdateSecurityStampAsync(adminUser);
         if (!passwordResult.Succeeded)
         {
-            _logger.LogWarning(AdminPasswordResetFailedMessage, string.Join(", ", passwordResult.Errors.Select(error => error.Description)));
+            adminUser.PasswordHash = previousPasswordHash;
+            _logger.LogError(AdminPasswordResetFailedMessage, string.Join(", ", passwordResult.Errors.Select(error => error.Description)));
             return;
         }
 

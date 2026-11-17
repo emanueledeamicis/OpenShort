@@ -382,9 +382,7 @@ environment:
 
 If you provide the key this way, OpenShort always prioritizes it over the one stored in SQLite or MySQL.
 
-**Rotating the key.** Start OpenShort once with `JWT_SECRET_KEY` set to a new random value of at least 32 characters. Every dashboard session is signed out and must sign in again. The new key is saved in the database, so you can remove the variable afterwards.
-
-Rotate the key after upgrading from version 0.3.0 or earlier if your API key was ever given to another person or service: those versions let anyone holding the API key read the JWT key.
+**Rotating the key.** Start OpenShort once with `JWT_SECRET_KEY` set to a new random value of at least 32 characters. Sessions opened before are no longer accepted, so everyone has to sign in again. The new key is saved in the database, so you can remove the variable afterwards.
 
 ## Custom Domain Setup
 

@@ -22,8 +22,9 @@ public class SettingsController : ControllerBase
     private const string SettingNotFoundMessage = "Setting not found.";
     private const string KeyAndValueRequiredMessage = "Key and Value are required.";
     private const string SettingNotEditableMessage = "This setting cannot be changed.";
-    private const string CacheDurationSecondsDescription = "Duration in seconds for which redirects are cached in memory.";
-    private const string CacheDurationSecondsInvalidMessage = "Cache duration must be a whole number of seconds between 0 and 86400.";
+
+    private static readonly string CacheDurationSecondsInvalidMessage =
+        $"Cache duration must be a whole number of seconds between 0 and {MaxCacheDurationSeconds}.";
 
     // A setting missing from this list does not exist for the API, whatever the table contains.
     // Names are compared exactly: the database may match them ignoring case.
@@ -31,7 +32,7 @@ public class SettingsController : ControllerBase
         new Dictionary<string, DashboardSetting>(StringComparer.Ordinal)
         {
             [DatabaseInitializer.CacheDurationSecondsKey] = new DashboardSetting(
-                CacheDurationSecondsDescription,
+                DatabaseInitializer.CacheDurationSecondsDescription,
                 CacheDurationSecondsInvalidMessage,
                 NormalizeCacheDurationSeconds)
         };

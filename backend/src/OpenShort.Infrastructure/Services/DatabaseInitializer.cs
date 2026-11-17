@@ -17,7 +17,7 @@ public class DatabaseInitializer
     private const string DefaultDomain = "localhost";
     private const string DefaultCacheDurationSecondsValue = "600";
     private const string InitialAdminSetupDescription = "Indicates whether the initial admin password setup flow is still required.";
-    private const string CacheDurationSecondsDescription = "Duration in seconds for which redirects are cached in memory.";
+    public const string CacheDurationSecondsDescription = "Duration in seconds for which redirects are cached in memory.";
     private const string AdminPasswordResetEnvironmentVariable = "ADMIN_PASSWORD_RESET";
     private const string ApplyingMigrationsMessage = "Applying database migrations...";
     private const string MigrationsAppliedMessage = "Database migrations applied successfully.";

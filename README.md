@@ -342,7 +342,9 @@ All environment variables can be configured directly inside the `environment:` s
 
 # Security
 - ASPNETCORE_ENVIRONMENT=Production
-- ADMIN_PASSWORD_RESET=Temporary-Passw0rd
+
+# Recovery only: resets the admin password at every start, remove it after use (see "Admin Password Recovery")
+# - ADMIN_PASSWORD_RESET=<new-password>
 
 # Optional: reverse proxies allowed to report the client IP address (see "Trusted proxies")
 - TRUSTED_PROXIES=172.30.0.1
@@ -354,12 +356,14 @@ All environment variables can be configured directly inside the `environment:` s
 
 If you lose the admin password in a self-hosted deployment, you can reset it at container startup with the optional `ADMIN_PASSWORD_RESET` environment variable.
 
-1. Add `ADMIN_PASSWORD_RESET=Your-New-Passw0rd` to the OpenShort container environment.
+1. Add `ADMIN_PASSWORD_RESET=<new-password>` to the OpenShort container environment, with a password of your own.
 2. Restart the container.
 3. Sign in with username `admin` and the new password.
-4. Remove the environment variable from your deployment after the reset is complete.
+4. Remove the environment variable from your deployment after the reset is complete. As long as it is set, the admin password is reset to that value at every start, even if you changed it from the dashboard in the meantime.
 
-The new password must follow the same rules as any other password: at least 8 characters, with an uppercase letter, a lowercase letter, a digit and a symbol. If it does not, the current password is left unchanged and the container logs report the error (`ADMIN_PASSWORD_RESET was not applied ...`) with the rules that were not met.
+The new password must follow the same rules as any other password: at least 8 characters, with an uppercase letter, a lowercase letter, a digit and a symbol, and no spaces at the beginning or at the end. If it does not, the current password is left unchanged and the container logs report the error (`ADMIN_PASSWORD_RESET was not applied ...`) with the reason.
+
+The reset does not sign out sessions that are already open: a token issued before the reset stays valid until it expires, up to 7 days.
 
 ### JWT Secret Key
 

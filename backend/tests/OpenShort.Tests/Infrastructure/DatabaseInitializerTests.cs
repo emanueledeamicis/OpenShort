@@ -100,12 +100,12 @@ public class DatabaseInitializerTests
     }
 
     // One case per rule of the password policy, plus the example the README used to suggest
-    [TestCase("Aa1!aaa", TestName = "Too short")]
-    [TestCase("lowercase-passw0rd", TestName = "No uppercase letter")]
-    [TestCase("UPPERCASE-PASSW0RD", TestName = "No lowercase letter")]
-    [TestCase("Temporary-Password", TestName = "No digit")]
-    [TestCase("TemporaryPassw0rd", TestName = "No symbol")]
-    [TestCase("temporary_emergency_password", TestName = "Former README example")]
+    [TestCase("Aa1!aaa", TestName = "{m}(Too short)")]
+    [TestCase("lowercase-passw0rd", TestName = "{m}(No uppercase letter)")]
+    [TestCase("UPPERCASE-PASSW0RD", TestName = "{m}(No lowercase letter)")]
+    [TestCase("Temporary-Password", TestName = "{m}(No digit)")]
+    [TestCase("TemporaryPassw0rd", TestName = "{m}(No symbol)")]
+    [TestCase("temporary_emergency_password", TestName = "{m}(Former README example)")]
     public async Task Initialize_ShouldKeepCurrentPassword_WhenResetPasswordIsInvalid(string invalidPassword)
     {
         // Arrange
@@ -199,6 +199,48 @@ public class DatabaseInitializerTests
         (await IsSetupRequiredAsync()).Should().BeFalse();
     }
 
+    [TestCase(" Temporary-Passw0rd", TestName = "{m}(Leading space)")]
+    [TestCase("Temporary-Passw0rd ", TestName = "{m}(Trailing space)")]
+    public async Task Initialize_ShouldKeepCurrentPasswordAndLogError_WhenResetPasswordHasSurroundingSpaces(string paddedPassword)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(paddedPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeTrue();
+        (await CheckAdminPasswordAsync(paddedPassword)).Should().BeFalse();
+        (await CheckAdminPasswordAsync(paddedPassword.Trim())).Should().BeFalse();
+        var error = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain(ResetVariable);
+        error.Message.Should().Contain("space");
+        error.Message.Should().NotContain(paddedPassword.Trim());
+    }
+
+    [Test]
+    public async Task Initialize_ShouldKeepCurrentPasswordAndLogError_WhenSavingTheNewPasswordFails()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        var stampBefore = await GetAdminSecurityStampAsync();
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(NewPassword, failUserSave: true);
+
+        // Assert
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeTrue();
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeFalse();
+        (await GetAdminSecurityStampAsync()).Should().Be(stampBefore);
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+        var error = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain("unchanged");
+        error.Message.Should().Contain(RejectingUserValidator.ErrorDescription);
+    }
+
     private async Task StartWithAdminPasswordAsync(string password)
     {
         await StartAsync(resetPassword: null);
@@ -213,9 +255,9 @@ public class DatabaseInitializerTests
             .SetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, "false");
     }
 
-    private async Task StartAsync(string? resetPassword)
+    private async Task StartAsync(string? resetPassword, bool failUserSave = false)
     {
-        await using var provider = BuildProvider(resetPassword);
+        await using var provider = BuildProvider(resetPassword, failUserSave);
         using var scope = provider.CreateScope();
         await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
     }
@@ -247,7 +289,7 @@ public class DatabaseInitializerTests
     }
 
     // Same registrations as Program.cs for the services the initializer uses
-    private ServiceProvider BuildProvider(string? resetPassword)
+    private ServiceProvider BuildProvider(string? resetPassword, bool failUserSave = false)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { [ResetVariable] = resetPassword })
@@ -260,10 +302,24 @@ public class DatabaseInitializerTests
         services.AddIdentityCore<AppUser>(AuthProtection.ConfigureIdentity)
             .AddRoles<IdentityRole>()
             .AddEntityFrameworkStores<AppDbContext>();
+        if (failUserSave)
+        {
+            services.AddScoped<IUserValidator<AppUser>, RejectingUserValidator>();
+        }
+
         services.AddScoped<ISettingService, SettingService>();
         services.AddSingleton(new Mock<IJwtKeyProvider>().Object);
         services.AddScoped<DatabaseInitializer>();
         return services.BuildServiceProvider();
+    }
+
+    // Identity runs the user validators before every save of a user: rejecting here makes the save fail
+    private sealed class RejectingUserValidator : IUserValidator<AppUser>
+    {
+        public const string ErrorDescription = "Save rejected by the test.";
+
+        public Task<IdentityResult> ValidateAsync(UserManager<AppUser> manager, AppUser user) =>
+            Task.FromResult(IdentityResult.Failed(new IdentityError { Code = "TestFailure", Description = ErrorDescription }));
     }
 
     private sealed record LogEntry(LogLevel Level, string Message);

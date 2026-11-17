@@ -26,6 +26,7 @@ public class DatabaseInitializer
     private const string AdminSeedFailedMessage = "Failed to seed admin user: {Errors}";
     private const string AdminRoleSeedFailedMessage = "Failed to seed admin role: {Errors}";
     private const string AdminRoleAssignmentFailedMessage = "Failed to assign admin role to bootstrap user: {Errors}";
+    private const string AdminPasswordResetSurroundingSpacesMessage = "{Variable} was not applied because the value starts or ends with a space, the admin password is unchanged. Remove the spaces around the value.";
     private const string AdminPasswordResetRejectedMessage = "{Variable} was not applied because the new password is not valid, the admin password is unchanged: {Errors}";
     private const string AdminPasswordResetFailedMessage = "Failed to apply bootstrap admin password reset, the admin password is unchanged: {Errors}";
     private const string AdminPasswordResetCompletedMessage = "Bootstrap admin password reset completed successfully.";
@@ -152,6 +153,13 @@ public class DatabaseInitializer
         var resetPassword = _configuration[AdminPasswordResetEnvironmentVariable];
         if (string.IsNullOrWhiteSpace(resetPassword))
         {
+            return;
+        }
+
+        // Surrounding spaces would become part of the password without anyone noticing
+        if (resetPassword != resetPassword.Trim())
+        {
+            _logger.LogError(AdminPasswordResetSurroundingSpacesMessage, AdminPasswordResetEnvironmentVariable);
             return;
         }
 

@@ -30,6 +30,7 @@ public class DatabaseInitializer
     private const string AdminPasswordResetRejectedMessage = "{Variable} was not applied because the new password is not valid, the admin password is unchanged: {Errors}";
     private const string AdminPasswordResetFailedMessage = "Failed to apply bootstrap admin password reset, the admin password is unchanged: {Errors}";
     private const string AdminPasswordResetCompletedMessage = "Bootstrap admin password reset completed successfully.";
+    private const string AdminUserNotRecreatedMessage = "The default admin user was deleted and is not created again: another administrator can sign in.";
 
     private readonly AppDbContext _context;
     private readonly UserManager<AppUser> _userManager;
@@ -117,9 +118,20 @@ public class DatabaseInitializer
 
     private async Task EnsureAdminUserAsync()
     {
+        var resetPassword = _configuration[AdminPasswordResetEnvironmentVariable];
         var adminUser = await _userManager.FindByNameAsync(AdminUserName);
         if (adminUser == null)
         {
+            // The default admin can be deleted when another administrator exists. Creating it again
+            // without a password would open the initial setup to anyone reaching the instance.
+            // It comes back only on request, through the password recovery.
+            if (string.IsNullOrWhiteSpace(resetPassword) && await AnyAdministratorHasPasswordAsync())
+            {
+                await SetInitialAdminSetupRequiredAsync(false);
+                _logger.LogInformation(AdminUserNotRecreatedMessage);
+                return;
+            }
+
             adminUser = new AppUser
             {
                 UserName = AdminUserName,
@@ -144,13 +156,9 @@ public class DatabaseInitializer
             }
         }
 
-        var adminHasPassword = await _userManager.HasPasswordAsync(adminUser);
-        await _settingService.SetSettingAsync(
-            InitialAdminSetupRequiredKey,
-            (!adminHasPassword).ToString().ToLowerInvariant(),
-            InitialAdminSetupDescription);
+        // The setup is for an instance nobody can sign in to: with any usable administrator it stays closed
+        await SetInitialAdminSetupRequiredAsync(!await AnyAdministratorHasPasswordAsync());
 
-        var resetPassword = _configuration[AdminPasswordResetEnvironmentVariable];
         if (string.IsNullOrWhiteSpace(resetPassword))
         {
             return;
@@ -192,12 +200,21 @@ public class DatabaseInitializer
             return;
         }
 
-        await _settingService.SetSettingAsync(
-            InitialAdminSetupRequiredKey,
-            bool.FalseString.ToLowerInvariant(),
-            InitialAdminSetupDescription);
+        await SetInitialAdminSetupRequiredAsync(false);
         _logger.LogInformation(AdminPasswordResetCompletedMessage);
     }
+
+    private async Task<bool> AnyAdministratorHasPasswordAsync()
+    {
+        var administrators = await _userManager.GetUsersInRoleAsync(AdminRoleName);
+        return administrators.Any(administrator => !string.IsNullOrEmpty(administrator.PasswordHash));
+    }
+
+    private Task SetInitialAdminSetupRequiredAsync(bool isRequired) =>
+        _settingService.SetSettingAsync(
+            InitialAdminSetupRequiredKey,
+            isRequired.ToString().ToLowerInvariant(),
+            InitialAdminSetupDescription);
 
     private async Task EnsureAdminRoleAsync()
     {

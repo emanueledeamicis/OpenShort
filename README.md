@@ -91,6 +91,8 @@ On the first startup, OpenShort creates the default administrator account:
 
 When you open the dashboard for the first time, you will be prompted to choose the password for the `admin` account. No default password is shipped with the application.
 
+Once you have created another administrator in the dashboard **Users** section, you can delete the `admin` account. It is not created again at the next start.
+
 After signing in, open the dashboard **Security** section to generate or manage the API key used by external integrations. Programmatic requests to the integration API must send that key in the `X-Api-Key` header.
 
 ### Stopping the application
@@ -362,6 +364,8 @@ If you lose the admin password in a self-hosted deployment, you can reset it at 
 4. Remove the environment variable from your deployment after the reset is complete. As long as it is set, the admin password is reset to that value at every start, even if you changed it from the dashboard in the meantime.
 
 The new password must follow the same rules as any other password: at least 8 characters, with an uppercase letter, a lowercase letter, a digit and a symbol, and no spaces at the beginning or at the end. If it does not, the current password is left unchanged and the container logs report the error (`ADMIN_PASSWORD_RESET was not applied ...`) with the reason.
+
+If the `admin` account was deleted, the recovery creates it again with the new password.
 
 The reset does not sign out sessions that are already open: a token issued before the reset stays valid until it expires, up to 7 days.
 

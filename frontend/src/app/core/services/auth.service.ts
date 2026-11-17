@@ -52,6 +52,8 @@ export class AuthService {
     logout(): void {
         localStorage.removeItem(this.tokenStorageKey);
         this.isAuthenticatedSubject.next(false);
+        // The page to return to belongs to the session that just ended
+        this.redirectUrl = null;
     }
 
     isAuthenticated(): boolean {

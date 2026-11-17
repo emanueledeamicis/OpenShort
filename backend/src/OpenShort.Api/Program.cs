@@ -134,14 +134,11 @@ builder.Services.AddAuthorization(options =>
     options.DefaultPolicy = defaultAuthorizationPolicyBuilder.Build();
 });
 
-// Configure usage of forwarded headers (Nginx proxy)
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.All;
-    // Clearing known networks/proxies lets it accept headers from any proxy (safe within Docker network)
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+// Forwarded headers are accepted only from the bundled Nginx (loopback) and from the declared reverse proxies
+// Parsed here so that an invalid value stops the startup before anything else happens
+var trustedProxies = OpenShort.Api.Auth.TrustedProxies.Parse(
+    builder.Configuration[OpenShort.Api.Auth.TrustedProxies.ConfigurationKey]);
+builder.Services.Configure<ForwardedHeadersOptions>(trustedProxies.Configure);
 
 builder.Services.AddIdentityCore<AppUser>(OpenShort.Api.Auth.AuthProtection.ConfigureIdentity)
     .AddRoles<IdentityRole>()
@@ -193,10 +190,20 @@ var app = builder.Build();
 
 app.Logger.LogInformation("Using database provider: {Database}", databaseDescription);
 
+app.Logger.LogInformation(
+    "Forwarded headers are trusted from loopback and from: {TrustedProxies}",
+    trustedProxies.Entries.Count > 0 ? string.Join(", ", trustedProxies.Entries) : "(no other proxy declared)");
+if (trustedProxies.TrustsEveryAddress)
+{
+    app.Logger.LogWarning(
+        "{ConfigurationKey} trusts every address: any client can choose the IP address it is seen with",
+        OpenShort.Api.Auth.TrustedProxies.ConfigurationKey);
+}
+
 // Configure the HTTP request pipeline.
 
-// Critical: Process Forwarded Headers (X-Forwarded-For, X-Forwarded-Proto) from Nginx
-app.UseForwardedHeaders();
+// Critical: Process Forwarded Headers (X-Forwarded-For, X-Forwarded-Proto) from trusted proxies
+OpenShort.Api.Auth.TrustedProxies.Use(app);
 
 // Global Exception Handler - returns RFC 7807 for unhandled exceptions
 app.UseExceptionHandler(); 

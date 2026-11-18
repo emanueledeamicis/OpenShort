@@ -13,7 +13,7 @@ public class MySqlConnectionStringFactoryTests
     public void Create_ShouldSetEveryValue()
     {
         // Act
-        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3307", "shortener", "app", "S3cr3t!Pass"));
+        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3307", "shortener", "app", "S3cr3t!Pass", "Required"));
 
         // Assert
         result.Server.Should().Be(Host);
@@ -21,7 +21,7 @@ public class MySqlConnectionStringFactoryTests
         result.Database.Should().Be("shortener");
         result.UserID.Should().Be("app");
         result.Password.Should().Be("S3cr3t!Pass");
-        result.SslMode.Should().Be(MySqlSslMode.None);
+        result.SslMode.Should().Be(MySqlSslMode.Required);
     }
 
     [TestCase(null)]
@@ -72,6 +72,7 @@ public class MySqlConnectionStringFactoryTests
     [TestCase("x;Server=attacker.example;Port=1")]
     [TestCase("x';Server=attacker.example;'")]
     [TestCase("x\";Server=attacker.example;\"")]
+    [TestCase("x;AllowPublicKeyRetrieval=false")]
     public void Create_ShouldNotLetThePasswordChangeOtherOptions(string password)
     {
         // Act
@@ -82,6 +83,7 @@ public class MySqlConnectionStringFactoryTests
         result.Server.Should().Be(Host);
         result.Port.Should().Be(3306);
         result.SslMode.Should().Be(MySqlSslMode.None);
+        result.AllowPublicKeyRetrieval.Should().BeTrue();
         result.AllowLoadLocalInfile.Should().BeFalse();
     }
 
@@ -163,6 +165,68 @@ public class MySqlConnectionStringFactoryTests
         result.Port.Should().Be(expectedPort);
     }
 
+    // The connection is plain unless MYSQL_SSL_MODE asks for TLS, as in the previous versions
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("  ")]
+    public void Create_ShouldNotUseTls_WhenSslModeIsMissing(string? sslMode)
+    {
+        // Act
+        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode));
+
+        // Assert
+        result.SslMode.Should().Be(MySqlSslMode.None);
+    }
+
+    [TestCase("None", MySqlSslMode.None)]
+    [TestCase("Preferred", MySqlSslMode.Preferred)]
+    [TestCase("Required", MySqlSslMode.Required)]
+    [TestCase("VerifyCA", MySqlSslMode.VerifyCA)]
+    [TestCase("VerifyFull", MySqlSslMode.VerifyFull)]
+    [TestCase("required", MySqlSslMode.Required)]
+    [TestCase("VERIFYFULL", MySqlSslMode.VerifyFull)]
+    [TestCase(" Required ", MySqlSslMode.Required)]
+    public void Create_ShouldUseTheConfiguredSslMode(string sslMode, MySqlSslMode expectedSslMode)
+    {
+        // Act
+        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode));
+
+        // Assert
+        result.SslMode.Should().Be(expectedSslMode);
+    }
+
+    // The first sign in of a MySQL 8 account needs TLS or the RSA key of the server
+    [TestCase("None", true)]
+    [TestCase("Preferred", true)]
+    [TestCase("Required", false)]
+    [TestCase("VerifyCA", false)]
+    [TestCase("VerifyFull", false)]
+    public void Create_ShouldAllowPublicKeyRetrieval_OnlyWhenTlsIsNotMandatory(string sslMode, bool expected)
+    {
+        // Act
+        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode));
+
+        // Assert
+        result.AllowPublicKeyRetrieval.Should().Be(expected);
+    }
+
+    [TestCase("abc")]
+    [TestCase("\"Required\"")]
+    [TestCase("1")]
+    [TestCase("Disabled")]
+    [TestCase("Verify-Full")]
+    [TestCase("Required;AllowLoadLocalInfile=true")]
+    public void Create_ShouldThrowNamingTheSettingAndNotThePassword_WhenSslModeIsNotValid(string sslMode)
+    {
+        // Act
+        var act = () => MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode);
+
+        // Assert
+        var exception = act.Should().Throw<InvalidOperationException>().Which;
+        exception.Message.Should().Contain("MYSQL_SSL_MODE").And.Contain(sslMode).And.Contain("VerifyFull");
+        exception.Message.Should().NotContain("S3cr3t!Pass");
+    }
+
     [Test]
     public void Create_ShouldProduceAStringTheLogDescriptionCanRead()
     {
@@ -171,7 +235,7 @@ public class MySqlConnectionStringFactoryTests
         var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql: true);
 
         // Assert
-        description.Should().Be("MySQL (server: db.internal, port: 3307, database: shortener)");
+        description.Should().Be("MySQL (server: db.internal, port: 3307, database: shortener, ssl mode: None)");
     }
 
     private static MySqlConnectionStringBuilder Parse(string connectionString) => new(connectionString);

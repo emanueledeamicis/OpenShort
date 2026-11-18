@@ -341,7 +341,7 @@ All environment variables can be configured directly inside the `environment:` s
 - MYSQL_DATABASE=openshort
 - MYSQL_USER=root
 - MYSQL_PASSWORD=secure_password
-# Optional: None, Preferred (default), Required, VerifyCA or VerifyFull
+# Optional: None (default), Preferred, Required, VerifyCA or VerifyFull
 # - MYSQL_SSL_MODE=Required
 
 # Security
@@ -358,7 +358,7 @@ All environment variables can be configured directly inside the `environment:` s
 
 > **Note:** The `MYSQL_*` values are used exactly as written, so a password can contain any character. Do not put quotes around them: in `- MYSQL_PASSWORD="secret"` the quotes become part of the password. To set other connection options, pass a full connection string in `ConnectionStrings__DefaultConnection` instead of the `MYSQL_*` variables.
 
-> **Note:** By default the connection to MySQL is encrypted when the server offers TLS, and plain otherwise; the server certificate is not checked. Set `MYSQL_SSL_MODE=Required` to refuse plain connections, or `VerifyCA` / `VerifyFull` to also check the certificate.
+> **Note:** By default the connection to MySQL is not encrypted. If the database is reached over a network you do not control, set `MYSQL_SSL_MODE` to `VerifyCA` or `VerifyFull`: they encrypt the connection and check the server certificate. `Required` encrypts without checking the certificate; `Preferred` encrypts only when the server offers TLS. TLS does not work with MySQL 5.7.
 
 ### Admin Password Recovery
 

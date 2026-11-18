@@ -5,7 +5,7 @@ namespace OpenShort.Infrastructure.Data;
 
 /// <summary>
 /// Builds a description of the configured database that is safe to write to logs:
-/// it never includes the user name, the password or any other connection string option.
+/// it never includes the user name or the password.
 /// </summary>
 public static class DatabaseConnectionDescriber
 {
@@ -23,7 +23,7 @@ public static class DatabaseConnectionDescriber
         try
         {
             var builder = new MySqlConnectionStringBuilder(connectionString ?? string.Empty);
-            return $"server: {builder.Server}, port: {builder.Port}, database: {builder.Database}";
+            return $"server: {builder.Server}, port: {builder.Port}, database: {builder.Database}, ssl mode: {builder.SslMode}";
         }
         catch (Exception ex) when (ex is ArgumentException or FormatException)
         {

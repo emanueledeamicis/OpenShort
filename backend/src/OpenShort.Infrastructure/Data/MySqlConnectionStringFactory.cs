@@ -18,7 +18,9 @@ public static class MySqlConnectionStringFactory
     private const uint DefaultPort = 3306;
     private const string DefaultDatabase = "openshort";
     private const string DefaultUser = "root";
-    private const MySqlSslMode DefaultSslMode = MySqlSslMode.Preferred;
+    // Plain by default, as it has always been: from the Linux image the TLS handshake with MySQL 5.7 fails,
+    // so a TLS default would stop existing installations from starting
+    private const MySqlSslMode DefaultSslMode = MySqlSslMode.None;
 
     private static readonly Dictionary<string, MySqlSslMode> SslModes = new(StringComparer.OrdinalIgnoreCase)
     {

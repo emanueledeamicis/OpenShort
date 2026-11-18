@@ -8,7 +8,7 @@ namespace OpenShort.Tests.Infrastructure;
 public class DatabaseConnectionDescriberTests
 {
     [Test]
-    public void Describe_ShouldReturnServerPortAndDatabase_ForMySql()
+    public void Describe_ShouldReturnServerPortDatabaseAndSslMode_ForMySql()
     {
         // Arrange
         var connectionString = "Server=db.internal;Port=3307;Database=openshort;User=shortener;Password=S3cr3t!Pass;SslMode=None;";
@@ -17,7 +17,7 @@ public class DatabaseConnectionDescriberTests
         var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql: true);
 
         // Assert
-        description.Should().Be("MySQL (server: db.internal, port: 3307, database: openshort)");
+        description.Should().Be("MySQL (server: db.internal, port: 3307, database: openshort, ssl mode: None)");
     }
 
     [TestCase("Server=db.internal;Port=3306;Database=openshort;User=shortener;Password=S3cr3t!Pass;SslMode=None;")]
@@ -91,7 +91,7 @@ public class DatabaseConnectionDescriberTests
         var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql: true);
 
         // Assert
-        description.Should().Be("MySQL (server: , port: 3306, database: )");
+        description.Should().Be("MySQL (server: , port: 3306, database: , ssl mode: Preferred)");
     }
 
     [TestCase(null)]

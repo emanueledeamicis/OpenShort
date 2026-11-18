@@ -10,6 +10,7 @@ services:
       # - MYSQL_DATABASE=openshort
       # - MYSQL_USER=openshort
       # - MYSQL_PASSWORD=openshort_password
+      # - MYSQL_SSL_MODE=Preferred
       # --- Security (Optional: Auto-generated if omitted) ---
       # - JWT_SECRET_KEY=ChangeMeToASecureRandomKeyAtLeast32CharsLong
       # --- Reverse proxy (Set it when a reverse proxy sits in front of OpenShort, see README) ---

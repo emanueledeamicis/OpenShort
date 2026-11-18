@@ -21,7 +21,6 @@ public class MySqlConnectionStringFactoryTests
         result.Database.Should().Be("shortener");
         result.UserID.Should().Be("app");
         result.Password.Should().Be("S3cr3t!Pass");
-        result.SslMode.Should().Be(MySqlSslMode.None);
     }
 
     [TestCase(null)]
@@ -81,7 +80,7 @@ public class MySqlConnectionStringFactoryTests
         result.Password.Should().Be(password);
         result.Server.Should().Be(Host);
         result.Port.Should().Be(3306);
-        result.SslMode.Should().Be(MySqlSslMode.None);
+        result.SslMode.Should().Be(MySqlSslMode.Preferred);
         result.AllowLoadLocalInfile.Should().BeFalse();
     }
 
@@ -101,7 +100,7 @@ public class MySqlConnectionStringFactoryTests
         result.Database.Should().Be("openshort;SslMode=Required");
         result.UserID.Should().Be("app;Password=other");
         result.Password.Should().Be("S3cr3t!Pass");
-        result.SslMode.Should().Be(MySqlSslMode.None);
+        result.SslMode.Should().Be(MySqlSslMode.Preferred);
         result.AllowLoadLocalInfile.Should().BeFalse();
     }
 
@@ -161,6 +160,68 @@ public class MySqlConnectionStringFactoryTests
 
         // Assert
         result.Port.Should().Be(expectedPort);
+    }
+
+    // MySQL 8 offers TLS by default: "Preferred" uses it and falls back to a plain connection otherwise
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("  ")]
+    public void Create_ShouldPreferTls_WhenSslModeIsMissing(string? sslMode)
+    {
+        // Act
+        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode));
+
+        // Assert
+        result.SslMode.Should().Be(MySqlSslMode.Preferred);
+    }
+
+    [TestCase("None", MySqlSslMode.None)]
+    [TestCase("Preferred", MySqlSslMode.Preferred)]
+    [TestCase("Required", MySqlSslMode.Required)]
+    [TestCase("VerifyCA", MySqlSslMode.VerifyCA)]
+    [TestCase("VerifyFull", MySqlSslMode.VerifyFull)]
+    [TestCase("required", MySqlSslMode.Required)]
+    [TestCase("VERIFYFULL", MySqlSslMode.VerifyFull)]
+    [TestCase(" Required ", MySqlSslMode.Required)]
+    public void Create_ShouldUseTheConfiguredSslMode(string sslMode, MySqlSslMode expectedSslMode)
+    {
+        // Act
+        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode));
+
+        // Assert
+        result.SslMode.Should().Be(expectedSslMode);
+    }
+
+    // The first sign in of a MySQL 8 account needs TLS or the RSA key of the server
+    [TestCase("None", true)]
+    [TestCase("Preferred", true)]
+    [TestCase("Required", false)]
+    [TestCase("VerifyCA", false)]
+    [TestCase("VerifyFull", false)]
+    public void Create_ShouldAllowPublicKeyRetrieval_OnlyWhenTlsIsNotMandatory(string sslMode, bool expected)
+    {
+        // Act
+        var result = Parse(MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode));
+
+        // Assert
+        result.AllowPublicKeyRetrieval.Should().Be(expected);
+    }
+
+    [TestCase("abc")]
+    [TestCase("\"Required\"")]
+    [TestCase("1")]
+    [TestCase("Disabled")]
+    [TestCase("Verify-Full")]
+    [TestCase("Required;AllowLoadLocalInfile=true")]
+    public void Create_ShouldThrowNamingTheSettingAndNotThePassword_WhenSslModeIsNotValid(string sslMode)
+    {
+        // Act
+        var act = () => MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode);
+
+        // Assert
+        var exception = act.Should().Throw<InvalidOperationException>().Which;
+        exception.Message.Should().Contain("MYSQL_SSL_MODE").And.Contain(sslMode).And.Contain("VerifyFull");
+        exception.Message.Should().NotContain("S3cr3t!Pass");
     }
 
     [Test]

@@ -23,7 +23,8 @@ if (!string.IsNullOrWhiteSpace(mysqlHost))
         builder.Configuration[MySqlConnectionStringFactory.PortSettingName],
         builder.Configuration["MYSQL_DATABASE"],
         builder.Configuration["MYSQL_USER"],
-        builder.Configuration["MYSQL_PASSWORD"]);
+        builder.Configuration["MYSQL_PASSWORD"],
+        builder.Configuration[MySqlConnectionStringFactory.SslModeSettingName]);
     databaseProvider = "MySql"; // Force provider if env vars are present
 }
 

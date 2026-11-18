@@ -341,6 +341,8 @@ All environment variables can be configured directly inside the `environment:` s
 - MYSQL_DATABASE=openshort
 - MYSQL_USER=root
 - MYSQL_PASSWORD=secure_password
+# Optional: None, Preferred (default), Required, VerifyCA or VerifyFull
+# - MYSQL_SSL_MODE=Required
 
 # Security
 - ASPNETCORE_ENVIRONMENT=Production
@@ -355,6 +357,8 @@ All environment variables can be configured directly inside the `environment:` s
 > **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (for example, `Password$$` becomes `Password$$$$`) so Docker does not interpret them as variables.
 
 > **Note:** The `MYSQL_*` values are used exactly as written, so a password can contain any character. Do not put quotes around them: in `- MYSQL_PASSWORD="secret"` the quotes become part of the password. To set other connection options, pass a full connection string in `ConnectionStrings__DefaultConnection` instead of the `MYSQL_*` variables.
+
+> **Note:** By default the connection to MySQL is encrypted when the server offers TLS, and plain otherwise; the server certificate is not checked. Set `MYSQL_SSL_MODE=Required` to refuse plain connections, or `VerifyCA` / `VerifyFull` to also check the certificate.
 
 ### Admin Password Recovery
 

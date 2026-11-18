@@ -15,14 +15,15 @@ var databaseProvider = builder.Configuration["DatabaseProvider"];
 
 // Check for individual MYSQL_ configurations from Environment, User Secrets, or appsettings
 var mysqlHost = builder.Configuration["MYSQL_HOST"];
-if (!string.IsNullOrEmpty(mysqlHost))
+if (!string.IsNullOrWhiteSpace(mysqlHost))
 {
-    var mysqlPort = builder.Configuration["MYSQL_PORT"] ?? "3306";
-    var mysqlDatabase = builder.Configuration["MYSQL_DATABASE"] ?? "openshort";
-    var mysqlUser = builder.Configuration["MYSQL_USER"] ?? "root";
-    var mysqlPassword = builder.Configuration["MYSQL_PASSWORD"] ?? "";
-    
-    connectionString = $"Server={mysqlHost};Port={mysqlPort};Database={mysqlDatabase};User={mysqlUser};Password={mysqlPassword};SslMode=None;";
+    // The values are escaped by the factory: they are never concatenated into the connection string
+    connectionString = MySqlConnectionStringFactory.Create(
+        mysqlHost,
+        builder.Configuration[MySqlConnectionStringFactory.PortSettingName],
+        builder.Configuration["MYSQL_DATABASE"],
+        builder.Configuration["MYSQL_USER"],
+        builder.Configuration["MYSQL_PASSWORD"]);
     databaseProvider = "MySql"; // Force provider if env vars are present
 }
 

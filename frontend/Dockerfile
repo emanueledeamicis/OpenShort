@@ -1,5 +1,6 @@
 # Stage 1: Build Angular app
-FROM node:20-alpine AS build
+# Same major version as .nvmrc
+FROM node:24-alpine AS build
 WORKDIR /app
 
 # Copy package files and install dependencies

@@ -291,6 +291,8 @@ dotnet ef database update --project ../OpenShort.Infrastructure
 
 ### Frontend (Angular)
 
+Requires Node.js 24 (see `frontend/.nvmrc`).
+
 ```bash
 cd frontend
 npm install

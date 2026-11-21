@@ -107,6 +107,7 @@ public class TrustedProxiesTests
 
     [TestCase(ExternalProxy)]
     [TestCase("10.0.0.0/8")]
+    [TestCase("10.0.0.1/8")]
     [TestCase("192.168.1.1, 10.0.0.5")]
     public async Task ClientAddress_ShouldBeTheRealClient_BehindADeclaredProxyAndTheBundledOne(string trustedProxies)
     {
@@ -123,6 +124,10 @@ public class TrustedProxiesTests
     [TestCase(ExternalProxy, ExternalProxy)]
     [TestCase(ExternalProxy, "::ffff:10.0.0.5")]
     [TestCase("fd00:1::/64", "fd00:1::5")]
+    [TestCase("fd00:1::9/64", "fd00:1::5")]
+    [TestCase("10.0.0.7/30", ExternalProxy)]
+    [TestCase("10.0.0.5/32", ExternalProxy)]
+    [TestCase("fd00:1::5/128", "fd00:1::5")]
     public async Task ClientAddress_ShouldBeTheRealClient_WhenADeclaredProxyCallsTheApiDirectly(string trustedProxies, string peer)
     {
         // Arrange
@@ -253,6 +258,14 @@ public class TrustedProxiesTests
     [TestCase("1")]
     [TestCase("0x7f.1")]
     [TestCase("10.1/16")]
+    [TestCase("10.0.0.0/33")]
+    [TestCase("fd00::/129")]
+    [TestCase("10.0.0.0/")]
+    [TestCase("10.0.0.0/-1")]
+    [TestCase("10.0.0.0/+8")]
+    [TestCase("10.0.0.0/ 8")]
+    [TestCase("10.0.0.0/8/9")]
+    [TestCase("10.0.0.0/255.0.0.0")]
     public void Parse_ShouldThrow_WhenAnEntryIsNotAnAddressOrANetwork(string trustedProxies)
     {
         // Act
@@ -274,9 +287,9 @@ public class TrustedProxiesTests
 
         // Assert
         options.KnownProxies.Should().Equal(IPAddress.IPv6Loopback);
-        options.KnownNetworks.Should().ContainSingle()
+        options.KnownIPNetworks.Should().ContainSingle()
             .Which.Contains(IPAddress.Parse("127.0.0.1")).Should().BeTrue();
-        options.KnownNetworks.Single().Contains(IPAddress.Parse(ExternalProxy)).Should().BeFalse();
+        options.KnownIPNetworks.Single().Contains(IPAddress.Parse(ExternalProxy)).Should().BeFalse();
     }
 
     [Test]
@@ -294,6 +307,9 @@ public class TrustedProxiesTests
     [TestCase("10.0.0.5, 10.0.0.0/24", false)]
     [TestCase("0.0.0.0/0", true)]
     [TestCase("10.0.0.5, ::/0", true)]
+    [TestCase("1.2.3.4/0", true)]
+    [TestCase("10.0.0.5/32", false)]
+    [TestCase("fd00::1/128", false)]
     public void TrustsEveryAddress_ShouldBeTrue_OnlyWhenANetworkCoversEveryAddress(string trustedProxies, bool expected)
     {
         // Act

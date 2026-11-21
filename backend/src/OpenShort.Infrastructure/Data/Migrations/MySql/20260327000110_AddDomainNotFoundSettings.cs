@@ -24,8 +24,7 @@ namespace OpenShort.Infrastructure.Data.Migrations.MySql
                 table: "Domains",
                 type: "varchar(2048)",
                 maxLength: 2048,
-                nullable: true)
-                .Annotation("MySql:CharSet", "utf8mb4");
+                nullable: true);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

@@ -42,7 +42,7 @@ OpenShort is a good fit for:
 ## Tech Stack
 
 **Backend:**
-- .NET 9 (ASP.NET Core Web API)
+- .NET 10 (ASP.NET Core Web API)
 - Entity Framework Core
 - ASP.NET Identity for authentication
 - FluentValidation
@@ -328,7 +328,7 @@ OpenShort/
 
 OpenShort is designed with a zero-config approach. By default, if you start the container without providing database parameters, it automatically creates and uses an embedded SQLite database. This is ideal for quick deployments, personal use, demos, and testing.
 
-If you prefer an external database for larger workloads, OpenShort also supports MySQL through environment variables.
+If you prefer an external database for larger workloads, OpenShort also supports MySQL through environment variables. MariaDB is not supported.
 
 ## Environment Variables
 

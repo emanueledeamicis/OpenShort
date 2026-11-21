@@ -11,7 +11,7 @@ public class DatabaseConnectionDescriberTests
     public void Describe_ShouldReturnServerPortDatabaseAndSslMode_ForMySql()
     {
         // Arrange
-        var connectionString = "Server=db.internal;Port=3307;Database=openshort;User=shortener;Password=S3cr3t!Pass;SslMode=None;";
+        var connectionString = "Server=db.internal;Port=3307;Database=openshort;User=shortener;Password=S3cr3t!Pass;SslMode=Disabled;";
 
         // Act
         var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql: true);
@@ -20,7 +20,7 @@ public class DatabaseConnectionDescriberTests
         description.Should().Be("MySQL (server: db.internal, port: 3307, database: openshort, ssl mode: None)");
     }
 
-    [TestCase("Server=db.internal;Port=3306;Database=openshort;User=shortener;Password=S3cr3t!Pass;SslMode=None;")]
+    [TestCase("Server=db.internal;Port=3306;Database=openshort;User=shortener;Password=S3cr3t!Pass;SslMode=Disabled;")]
     [TestCase("server=db.internal;database=openshort;uid=shortener;pwd=S3cr3t!Pass")]
     [TestCase("Host=db.internal;Initial Catalog=openshort;User Id=shortener;Password='S3cr3t!Pass'")]
     public void Describe_ShouldNotExposeCredentials_ForMySql(string connectionString)
@@ -72,6 +72,7 @@ public class DatabaseConnectionDescriberTests
     [TestCase("Data Source=data/openshort.db;Default Timeout=abc;Password=S3cr3t!Pass", false)]
     [TestCase("Data Source=data/openshort.db;Pooling=maybe;Password=S3cr3t!Pass", false)]
     [TestCase("Server=db.internal;Port=abc;Password=S3cr3t!Pass", true)]
+    [TestCase("Server=db.internal;SslMode=None;Password=S3cr3t!Pass", true)]
     [TestCase("Server=db.internal;Pooling=maybe;Password=S3cr3t!Pass", true)]
     public void Describe_ShouldNotThrowOrExposePassword_WhenAnOptionValueIsInvalid(string connectionString, bool useMySql)
     {
@@ -81,6 +82,18 @@ public class DatabaseConnectionDescriberTests
         // Assert
         description.Should().Contain("connection details could not be read");
         description.Should().NotContain("S3cr3t!Pass");
+    }
+
+    [TestCase("Server=db.internal;Password")]
+    [TestCase("Server=db.internal;Password='S3cr3t!Pass")]
+    [TestCase("Server=db.internal;User=shortener;Password=first;S3cr3t!Pass")]
+    public void Describe_ShouldNotThrowOrExposePassword_WhenTheMySqlConnectionStringIsMalformed(string connectionString)
+    {
+        // Act
+        var description = DatabaseConnectionDescriber.Describe(connectionString, useMySql: true);
+
+        // Assert
+        description.Should().Be("MySQL (connection details could not be read)");
     }
 
     [TestCase(null)]

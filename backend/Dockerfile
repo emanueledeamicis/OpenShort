@@ -1,5 +1,6 @@
 # Stage 1: Build Angular Frontend
-FROM node:20 AS frontend-build
+# Same major version as frontend/.nvmrc, which the CI reads
+FROM node:24 AS frontend-build
 WORKDIR /app
 COPY ../frontend/package*.json ./
 RUN npm ci

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Data.Common;
 using MySql.Data.MySqlClient;
 
 namespace OpenShort.Infrastructure.Data;
@@ -81,5 +82,24 @@ public static class MySqlConnectionStringFactory
         }
 
         return parsedSslMode;
+    }
+
+    /// <summary>
+    /// Stops the start when a full connection string cannot be read. The error of the driver is not
+    /// reported: it quotes the text it could not read, which can be a piece of the password.
+    /// </summary>
+    public static void EnsureReadable(string? connectionString)
+    {
+        try
+        {
+            _ = new MySqlConnectionStringBuilder(connectionString ?? string.Empty);
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException or DbException)
+        {
+            throw new InvalidOperationException(
+                "The MySQL connection string could not be read. Check that every option is written as name=value, "
+                + "that values containing ';' or quotes are quoted, and that the options are the ones of MySQL Connector/NET "
+                + "(for example SslMode=Disabled, not SslMode=None).");
+        }
     }
 }

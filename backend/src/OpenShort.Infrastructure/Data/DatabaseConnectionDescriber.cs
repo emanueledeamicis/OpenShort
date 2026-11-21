@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Microsoft.Data.Sqlite;
 using MySql.Data.MySqlClient;
 
@@ -27,7 +28,7 @@ public static class DatabaseConnectionDescriber
             var sslMode = builder.SslMode == MySqlSslMode.Disabled ? "None" : builder.SslMode.ToString();
             return $"server: {builder.Server}, port: {builder.Port}, database: {builder.Database}, ssl mode: {sslMode}";
         }
-        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        catch (Exception ex) when (ex is ArgumentException or FormatException or DbException)
         {
             // Never fall back to the raw connection string: it may contain the password
             return UnreadableDetails;

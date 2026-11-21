@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using NUnit.Framework;
 using OpenShort.Infrastructure.Data;
 
@@ -27,6 +29,25 @@ public class MigrationsTests
 
         // Assert
         hasPendingChanges.Should().BeFalse();
+    }
+
+    [Test]
+    public void MySqlMigrations_ShouldSetTheCharacterSetBeforeCreatingTheTables()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<MySqlDbContext>()
+            .UseMySQL("Server=localhost;Database=openshort;User=openshort;Password=unused;")
+            .Options;
+        using var context = new MySqlDbContext(options);
+
+        // Act
+        var script = context.GetService<IMigrator>().GenerateScript();
+
+        // Assert
+        var characterSet = script.IndexOf("ALTER DATABASE CHARACTER SET utf8mb4;", StringComparison.Ordinal);
+        var firstTable = script.IndexOf("CREATE TABLE `ApiKeys`", StringComparison.Ordinal);
+        characterSet.Should().BeGreaterThan(-1);
+        firstTable.Should().BeGreaterThan(characterSet);
     }
 
     [Test]

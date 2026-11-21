@@ -34,6 +34,8 @@ bool useMySql = string.Equals(databaseProvider, "MySql", StringComparison.Ordina
 
 if (useMySql)
 {
+    MySqlConnectionStringFactory.EnsureReadable(connectionString);
+
     builder.Services.AddDbContext<AppDbContext, MySqlDbContext>(options =>
         options.UseMySQL(connectionString!));
 }

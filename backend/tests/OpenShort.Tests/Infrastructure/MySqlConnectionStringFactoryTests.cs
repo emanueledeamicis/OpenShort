@@ -239,4 +239,33 @@ public class MySqlConnectionStringFactoryTests
     }
 
     private static MySqlConnectionStringBuilder Parse(string connectionString) => new(connectionString);
+
+    [TestCase("Server=db.internal;Password")]
+    [TestCase("Server=db.internal;Password='S3cr3t!Pass")]
+    [TestCase("Server=db.internal;User=shortener;Password=first;S3cr3t!Pass")]
+    [TestCase("Server=db.internal;Password=S3cr3t!Pass;SslMode=None")]
+    [TestCase("Server=db.internal;Password=S3cr3t!Pass;Port=abc")]
+    public void EnsureReadable_ShouldThrowWithoutExposingThePassword_WhenTheConnectionStringCannotBeRead(string connectionString)
+    {
+        // Act
+        var act = () => MySqlConnectionStringFactory.EnsureReadable(connectionString);
+
+        // Assert
+        var exception = act.Should().Throw<InvalidOperationException>().Which;
+        exception.ToString().Should().NotContain("S3cr3t!Pass");
+        exception.InnerException.Should().BeNull();
+    }
+
+    [Test]
+    public void EnsureReadable_ShouldAcceptAConnectionStringBuiltFromTheSettings()
+    {
+        // Arrange
+        var connectionString = MySqlConnectionStringFactory.Create("db.internal", "3306", "openshort", "shortener", "pa;ss='word");
+
+        // Act
+        var act = () => MySqlConnectionStringFactory.EnsureReadable(connectionString);
+
+        // Assert
+        act.Should().NotThrow();
+    }
 }

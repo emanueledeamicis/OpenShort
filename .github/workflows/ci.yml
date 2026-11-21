@@ -47,8 +47,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          # Same major version as the frontend stage of backend/Dockerfile
-          node-version: 20
+          # Keep the frontend stage of backend/Dockerfile on the same major version
+          node-version-file: frontend/.nvmrc
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 

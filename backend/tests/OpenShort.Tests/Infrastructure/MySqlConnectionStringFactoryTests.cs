@@ -1,5 +1,5 @@
 using FluentAssertions;
-using MySqlConnector;
+using MySql.Data.MySqlClient;
 using OpenShort.Infrastructure.Data;
 
 namespace OpenShort.Tests.Infrastructure;
@@ -82,7 +82,7 @@ public class MySqlConnectionStringFactoryTests
         result.Password.Should().Be(password);
         result.Server.Should().Be(Host);
         result.Port.Should().Be(3306);
-        result.SslMode.Should().Be(MySqlSslMode.None);
+        result.SslMode.Should().Be(MySqlSslMode.Disabled);
         result.AllowPublicKeyRetrieval.Should().BeTrue();
         result.AllowLoadLocalInfile.Should().BeFalse();
     }
@@ -103,7 +103,7 @@ public class MySqlConnectionStringFactoryTests
         result.Database.Should().Be("openshort;SslMode=Required");
         result.UserID.Should().Be("app;Password=other");
         result.Password.Should().Be("S3cr3t!Pass");
-        result.SslMode.Should().Be(MySqlSslMode.None);
+        result.SslMode.Should().Be(MySqlSslMode.Disabled);
         result.AllowLoadLocalInfile.Should().BeFalse();
     }
 
@@ -175,10 +175,10 @@ public class MySqlConnectionStringFactoryTests
         var result = Parse(MySqlConnectionStringFactory.Create(Host, "3306", "openshort", "app", "S3cr3t!Pass", sslMode));
 
         // Assert
-        result.SslMode.Should().Be(MySqlSslMode.None);
+        result.SslMode.Should().Be(MySqlSslMode.Disabled);
     }
 
-    [TestCase("None", MySqlSslMode.None)]
+    [TestCase("None", MySqlSslMode.Disabled)]
     [TestCase("Preferred", MySqlSslMode.Preferred)]
     [TestCase("Required", MySqlSslMode.Required)]
     [TestCase("VerifyCA", MySqlSslMode.VerifyCA)]

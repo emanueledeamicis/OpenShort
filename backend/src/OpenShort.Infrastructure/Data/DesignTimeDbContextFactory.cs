@@ -17,7 +17,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<SqliteDbCo
     MySqlDbContext IDesignTimeDbContextFactory<MySqlDbContext>.CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<MySqlDbContext>();
-        optionsBuilder.UseMySql("Server=localhost;Database=openshort;User=root;Password=root;", ServerVersion.Parse("8.0.30-mysql"));
+        optionsBuilder.UseMySQL("Server=localhost;Database=openshort;User=root;Password=root;");
 
         return new MySqlDbContext(optionsBuilder.Options);
     }

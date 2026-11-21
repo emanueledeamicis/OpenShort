@@ -1,5 +1,5 @@
 using System.Globalization;
-using MySqlConnector;
+using MySql.Data.MySqlClient;
 
 namespace OpenShort.Infrastructure.Data;
 
@@ -20,11 +20,11 @@ public static class MySqlConnectionStringFactory
     private const string DefaultUser = "root";
     // Plain by default, as it has always been: from the Linux image the TLS handshake with MySQL 5.7 fails,
     // so a TLS default would stop existing installations from starting
-    private const MySqlSslMode DefaultSslMode = MySqlSslMode.None;
+    private const MySqlSslMode DefaultSslMode = MySqlSslMode.Disabled;
 
     private static readonly Dictionary<string, MySqlSslMode> SslModes = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["None"] = MySqlSslMode.None,
+        ["None"] = MySqlSslMode.Disabled,
         ["Preferred"] = MySqlSslMode.Preferred,
         ["Required"] = MySqlSslMode.Required,
         ["VerifyCA"] = MySqlSslMode.VerifyCA,
@@ -45,7 +45,7 @@ public static class MySqlConnectionStringFactory
             SslMode = parsedSslMode,
             // Without TLS, the default authentication of MySQL 8 (caching_sha2_password) needs the RSA key
             // of the server for the first sign in of an account. When TLS is mandatory it is never needed.
-            AllowPublicKeyRetrieval = parsedSslMode is MySqlSslMode.None or MySqlSslMode.Preferred
+            AllowPublicKeyRetrieval = parsedSslMode is MySqlSslMode.Disabled or MySqlSslMode.Preferred
         };
 
         return builder.ConnectionString;

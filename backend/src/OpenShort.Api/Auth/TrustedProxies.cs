@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.AspNetCore.HttpOverrides;
-using ProxyNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
+using IPNetwork = System.Net.IPNetwork;
 
 namespace OpenShort.Api.Auth;
 
@@ -21,7 +22,7 @@ public sealed class TrustedProxies
 
     private const string ForwardedForHeader = "X-Forwarded-For";
 
-    private TrustedProxies(IReadOnlyList<string> entries, IReadOnlyList<IPAddress> addresses, IReadOnlyList<ProxyNetwork> networks)
+    private TrustedProxies(IReadOnlyList<string> entries, IReadOnlyList<IPAddress> addresses, IReadOnlyList<IPNetwork> networks)
     {
         Entries = entries;
         Addresses = addresses;
@@ -33,7 +34,7 @@ public sealed class TrustedProxies
 
     public IReadOnlyList<IPAddress> Addresses { get; }
 
-    public IReadOnlyList<ProxyNetwork> Networks { get; }
+    public IReadOnlyList<IPNetwork> Networks { get; }
 
     /// <summary>True when a declared network covers every address, which disables the protection.</summary>
     public bool TrustsEveryAddress => Networks.Any(network => network.PrefixLength == 0);
@@ -46,7 +47,7 @@ public sealed class TrustedProxies
     {
         var entries = (value ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var addresses = new List<IPAddress>();
-        var networks = new List<ProxyNetwork>();
+        var networks = new List<IPNetwork>();
 
         foreach (var entry in entries)
         {
@@ -55,9 +56,7 @@ public sealed class TrustedProxies
             {
                 addresses.Add(address);
             }
-            else if (separatorIndex >= 0
-                && TryParseAddress(entry[..separatorIndex], out _)
-                && ProxyNetwork.TryParse(entry, out var network))
+            else if (separatorIndex >= 0 && TryParseNetwork(entry, separatorIndex, out var network))
             {
                 networks.Add(network);
             }
@@ -91,7 +90,7 @@ public sealed class TrustedProxies
 
         foreach (var network in Networks)
         {
-            options.KnownNetworks.Add(network);
+            options.KnownIPNetworks.Add(network);
         }
     }
 
@@ -106,6 +105,34 @@ public sealed class TrustedProxies
         }
 
         address = parsed;
+        return true;
+    }
+
+    // IPNetwork.TryParse refuses an address with bits set after the prefix ("172.17.0.1/16"),
+    // which is how a network is often copied from a container: those bits are cleared instead
+    private static bool TryParseNetwork(string entry, int separatorIndex, out IPNetwork network)
+    {
+        network = default;
+
+        if (!TryParseAddress(entry[..separatorIndex], out var address)
+            || !int.TryParse(entry[(separatorIndex + 1)..], NumberStyles.None, CultureInfo.InvariantCulture, out var prefixLength))
+        {
+            return false;
+        }
+
+        var bytes = address.GetAddressBytes();
+        if (prefixLength > bytes.Length * 8)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < bytes.Length; index++)
+        {
+            var keptBits = Math.Clamp(prefixLength - (index * 8), 0, 8);
+            bytes[index] &= (byte)(0xFF << (8 - keptBits));
+        }
+
+        network = new IPNetwork(new IPAddress(bytes), prefixLength);
         return true;
     }
 

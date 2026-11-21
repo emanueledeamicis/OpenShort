@@ -107,6 +107,7 @@ public class TrustedProxiesTests
 
     [TestCase(ExternalProxy)]
     [TestCase("10.0.0.0/8")]
+    [TestCase("10.0.0.1/8")]
     [TestCase("192.168.1.1, 10.0.0.5")]
     public async Task ClientAddress_ShouldBeTheRealClient_BehindADeclaredProxyAndTheBundledOne(string trustedProxies)
     {
@@ -274,9 +275,9 @@ public class TrustedProxiesTests
 
         // Assert
         options.KnownProxies.Should().Equal(IPAddress.IPv6Loopback);
-        options.KnownNetworks.Should().ContainSingle()
+        options.KnownIPNetworks.Should().ContainSingle()
             .Which.Contains(IPAddress.Parse("127.0.0.1")).Should().BeTrue();
-        options.KnownNetworks.Single().Contains(IPAddress.Parse(ExternalProxy)).Should().BeFalse();
+        options.KnownIPNetworks.Single().Contains(IPAddress.Parse(ExternalProxy)).Should().BeFalse();
     }
 
     [Test]

@@ -35,7 +35,7 @@ bool useMySql = string.Equals(databaseProvider, "MySql", StringComparison.Ordina
 if (useMySql)
 {
     builder.Services.AddDbContext<AppDbContext, MySqlDbContext>(options =>
-        options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+        options.UseMySQL(connectionString!));
 }
 else
 {

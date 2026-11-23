@@ -27,6 +27,8 @@ public static class AuthProtection
         options.Password.RequireLowercase = true;
         options.Password.RequireUppercase = true;
         options.Password.RequireNonAlphanumeric = true;
+
+        TwoFactorCodes.ConfigureIdentity(options);
     }
 
     public static void ConfigureRateLimiter(RateLimiterOptions options)

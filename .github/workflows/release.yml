@@ -55,8 +55,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Written by the CI runs on main
           cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2

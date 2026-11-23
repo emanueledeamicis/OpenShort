@@ -57,10 +57,12 @@ public class TwoFactorController : ControllerBase
 
     /// <summary>
     /// Creates a new secret for the authenticator app. Nothing is protected until a code is confirmed.
+    /// The password is asked here, so that a stolen token alone cannot put a second factor on the account
+    /// and keep its owner out.
     /// </summary>
     [HttpPost("setup")]
     [EnableRateLimiting(AuthProtection.RateLimitPolicy)]
-    public async Task<ActionResult<TwoFactorSetupResponse>> Setup()
+    public async Task<ActionResult<TwoFactorSetupResponse>> Setup([FromBody] TwoFactorPasswordRequest request)
     {
         var user = await GetCurrentUserAsync();
         if (user == null)
@@ -74,13 +76,20 @@ public class TwoFactorController : ControllerBase
             return Conflict(new { message = AlreadyEnabledMessage });
         }
 
+        if (!await _userManager.CheckPasswordAsync(user, request.Password))
+        {
+            _logger.LogWarning("Two-factor setup was not started for user {UserId}: incorrect password", user.Id);
+            return BadRequest(new { message = IncorrectPasswordMessage });
+        }
+
         var resetResult = await _userManager.ResetAuthenticatorKeyAsync(user);
         if (!resetResult.Succeeded)
         {
-            return UnexpectedError(user, resetResult);
+            return UnexpectedError(user, resetResult.Errors);
         }
 
         var sharedKey = await _userManager.GetAuthenticatorKeyAsync(user);
+        DoNotStoreResponse();
         return Ok(new TwoFactorSetupResponse
         {
             SharedKey = sharedKey!,
@@ -122,16 +131,23 @@ public class TwoFactorController : ControllerBase
             return BadRequest(new { message = InvalidCodeMessage });
         }
 
+        // The codes come first: if turning it on fails they are left unused, while the opposite order
+        // could leave the account protected by a second factor and without any recovery code
+        var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, RecoveryCodeCount);
+        if (recoveryCodes == null)
+        {
+            return UnexpectedError(user, []);
+        }
+
         var enableResult = await _userManager.SetTwoFactorEnabledAsync(user, true);
         if (!enableResult.Succeeded)
         {
-            return UnexpectedError(user, enableResult);
+            return UnexpectedError(user, enableResult.Errors);
         }
 
-        var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, RecoveryCodeCount);
-
         _logger.LogInformation("Two-factor authentication enabled for user {UserId}", user.Id);
-        return Ok(new TwoFactorRecoveryCodesResponse { RecoveryCodes = recoveryCodes!.ToList() });
+        DoNotStoreResponse();
+        return Ok(new TwoFactorRecoveryCodesResponse { RecoveryCodes = recoveryCodes.ToList() });
     }
 
     /// <summary>
@@ -159,9 +175,14 @@ public class TwoFactorController : ControllerBase
         }
 
         var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, RecoveryCodeCount);
+        if (recoveryCodes == null)
+        {
+            return UnexpectedError(user, []);
+        }
 
         _logger.LogInformation("Recovery codes regenerated for user {UserId}", user.Id);
-        return Ok(new TwoFactorRecoveryCodesResponse { RecoveryCodes = recoveryCodes!.ToList() });
+        DoNotStoreResponse();
+        return Ok(new TwoFactorRecoveryCodesResponse { RecoveryCodes = recoveryCodes.ToList() });
     }
 
     [HttpPost("disable")]
@@ -188,7 +209,7 @@ public class TwoFactorController : ControllerBase
         var disableResult = await TwoFactorCodes.DisableAsync(_userManager, user);
         if (!disableResult.Succeeded)
         {
-            return UnexpectedError(user, disableResult);
+            return UnexpectedError(user, disableResult.Errors);
         }
 
         _logger.LogInformation("Two-factor authentication disabled for user {UserId}", user.Id);
@@ -201,12 +222,18 @@ public class TwoFactorController : ControllerBase
         return string.IsNullOrEmpty(userId) ? null : await _userManager.FindByIdAsync(userId);
     }
 
-    private ObjectResult UnexpectedError(AppUser user, IdentityResult result)
+    // The secret and the recovery codes must not be kept by a browser or by a proxy
+    private void DoNotStoreResponse()
+    {
+        Response.Headers.CacheControl = "no-store";
+    }
+
+    private ObjectResult UnexpectedError(AppUser user, IEnumerable<IdentityError> errors)
     {
         _logger.LogError(
             "Two-factor update failed for user {UserId}: {Errors}",
             user.Id,
-            string.Join(", ", result.Errors.Select(error => error.Description)));
+            string.Join(", ", errors.Select(error => error.Description)));
         return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedErrorMessage);
     }
 }

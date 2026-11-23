@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -116,11 +117,75 @@ public class TwoFactorControllerTests
         var sharedKey = await EnableAsync();
 
         // Act
-        var result = await _controller.Setup();
+        var result = await _controller.Setup(new TwoFactorPasswordRequest { Password = Password });
 
         // Assert
         result.Result.Should().BeOfType<ConflictObjectResult>();
         (await _userManager.GetAuthenticatorKeyAsync(_user)).Should().Be(sharedKey);
+    }
+
+    [Test]
+    public async Task Setup_ShouldReturnBadRequest_AndCreateNoSecret_WhenThePasswordIsWrong()
+    {
+        // Act
+        var result = await _controller.Setup(new TwoFactorPasswordRequest { Password = WrongPassword });
+
+        // Assert
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        (await _userManager.GetAuthenticatorKeyAsync(_user)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task Setup_ShouldReplaceASecretLeftBehind()
+    {
+        // Arrange: what an interrupted deactivation leaves, two-factor off and the old secret still stored
+        var oldKey = await EnableAsync();
+        (await _userManager.SetTwoFactorEnabledAsync(_user, false)).Succeeded.Should().BeTrue();
+
+        // Act
+        var setup = await SetupAsync();
+
+        // Assert
+        setup.SharedKey.Should().NotBe(oldKey);
+        (await _userManager.GetAuthenticatorKeyAsync(_user)).Should().Be(setup.SharedKey);
+    }
+
+    [Test]
+    public async Task Setup_ShouldAskNotToStoreTheResponse()
+    {
+        // Act
+        await SetupAsync();
+
+        // Assert
+        _controller.Response.Headers.CacheControl.ToString().Should().Be("no-store");
+    }
+
+    [Test]
+    public async Task Enable_ShouldAskNotToStoreTheResponse()
+    {
+        // Arrange
+        var setup = await SetupAsync();
+        _controller.Response.Headers.Remove("Cache-Control");
+
+        // Act
+        await _controller.Enable(new EnableTwoFactorRequest { Code = TotpGenerator.Generate(setup.SharedKey) });
+
+        // Assert
+        _controller.Response.Headers.CacheControl.ToString().Should().Be("no-store");
+    }
+
+    [Test]
+    public async Task RegenerateRecoveryCodes_ShouldAskNotToStoreTheResponse()
+    {
+        // Arrange
+        await EnableAsync();
+        _controller.Response.Headers.Remove("Cache-Control");
+
+        // Act
+        await _controller.RegenerateRecoveryCodes(new TwoFactorPasswordRequest { Password = Password });
+
+        // Assert
+        _controller.Response.Headers.CacheControl.ToString().Should().Be("no-store");
     }
 
     [Test]
@@ -157,7 +222,6 @@ public class TwoFactorControllerTests
 
     [TestCase("000000")]
     [TestCase("not-a-code")]
-    [TestCase("")]
     public async Task Enable_ShouldReturnBadRequest_WhenTheCodeIsNotValid(string code)
     {
         // Arrange
@@ -175,18 +239,60 @@ public class TwoFactorControllerTests
         (await GetStatusAsync()).IsEnabled.Should().BeFalse();
     }
 
-    [Test]
-    public async Task Enable_ShouldReturnBadRequest_WhenTheCodeIsOld()
+    // Identity accepts the codes of the two 30-second steps before and after the current one.
+    // The tests stay one step inside and two steps outside that window, so they do not depend on the second they run
+    [TestCase(-30)]
+    [TestCase(30)]
+    public async Task Enable_ShouldAcceptTheCodeOfTheStepNextToTheCurrentOne(int secondsFromNow)
     {
         // Arrange
         var setup = await SetupAsync();
-        var oldCode = TotpGenerator.Generate(setup.SharedKey, DateTimeOffset.UtcNow.AddMinutes(-10));
+        var code = TotpGenerator.Generate(setup.SharedKey, DateTimeOffset.UtcNow.AddSeconds(secondsFromNow));
 
         // Act
-        var result = await _controller.Enable(new EnableTwoFactorRequest { Code = oldCode });
+        var result = await _controller.Enable(new EnableTwoFactorRequest { Code = code });
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [TestCase(-150)]
+    [TestCase(150)]
+    [TestCase(-600)]
+    public async Task Enable_ShouldReturnBadRequest_WhenTheCodeIsOutsideTheAcceptedWindow(int secondsFromNow)
+    {
+        // Arrange
+        var setup = await SetupAsync();
+        var code = TotpGenerator.Generate(setup.SharedKey, DateTimeOffset.UtcNow.AddSeconds(secondsFromNow));
+
+        // Act
+        var result = await _controller.Enable(new EnableTwoFactorRequest { Code = code });
 
         // Assert
         result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Test]
+    public void CreateAuthenticatorUri_ShouldEscapeTheUserName()
+    {
+        // Act: the users created from the dashboard have their email address as user name
+        var uri = TwoFactorCodes.CreateAuthenticatorUri("owner+test@example.com", "ABCDEFGH");
+
+        // Assert
+        uri.Should().Be("otpauth://totp/OpenShort:owner%2Btest%40example.com?secret=ABCDEFGH&issuer=OpenShort&digits=6");
+    }
+
+    [Test]
+    public void EnableRequest_ShouldLimitTheLengthOfTheCode()
+    {
+        // Arrange
+        var request = new EnableTwoFactorRequest { Code = new string('1', EnableTwoFactorRequest.MaxCodeLength + 1) };
+
+        // Act
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), null, validateAllProperties: true);
+
+        // Assert
+        isValid.Should().BeFalse();
     }
 
     [Test]
@@ -317,8 +423,12 @@ public class TwoFactorControllerTests
         (await _userManager.DeleteAsync(_user)).Succeeded.Should().BeTrue();
 
         // Act and assert
+        var password = new TwoFactorPasswordRequest { Password = Password };
         (await _controller.GetStatus()).Result.Should().BeOfType<UnauthorizedResult>();
-        (await _controller.Setup()).Result.Should().BeOfType<UnauthorizedResult>();
+        (await _controller.Setup(password)).Result.Should().BeOfType<UnauthorizedResult>();
+        (await _controller.Enable(new EnableTwoFactorRequest { Code = "123456" })).Result.Should().BeOfType<UnauthorizedResult>();
+        (await _controller.RegenerateRecoveryCodes(password)).Result.Should().BeOfType<UnauthorizedResult>();
+        (await _controller.Disable(password)).Should().BeOfType<UnauthorizedResult>();
     }
 
     [Test]
@@ -358,7 +468,7 @@ public class TwoFactorControllerTests
 
     private async Task<TwoFactorSetupResponse> SetupAsync()
     {
-        var result = await _controller.Setup();
+        var result = await _controller.Setup(new TwoFactorPasswordRequest { Password = Password });
         return (TwoFactorSetupResponse)result.Result.Should().BeOfType<OkObjectResult>().Which.Value!;
     }
 

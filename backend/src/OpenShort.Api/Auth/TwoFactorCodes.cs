@@ -19,8 +19,9 @@ public static class TwoFactorCodes
     private const string RecoveryCodesTokenName = "RecoveryCodes";
 
     /// <summary>
-    /// Registers the Identity provider that verifies the codes. The instance is given here,
-    /// so every UserManager configured with these options has it without a service registration.
+    /// Registers the Identity provider that verifies the codes, for a UserManager built from these options
+    /// alone. In the application AddApiEndpoints registers the same provider as a service, which replaces
+    /// the instance given here.
     /// </summary>
     public static void ConfigureIdentity(IdentityOptions options)
     {
@@ -49,8 +50,9 @@ public static class TwoFactorCodes
     }
 
     /// <summary>
-    /// Turns two-factor authentication off and throws away the secret and the recovery codes,
-    /// so that turning it on again always starts from a new secret.
+    /// Turns two-factor authentication off, then throws away the secret and the recovery codes.
+    /// These are separate saves, in this order: if a later one fails, two-factor authentication is off
+    /// and what is left is replaced by the next setup.
     /// </summary>
     public static async Task<IdentityResult> DisableAsync(UserManager<AppUser> userManager, AppUser user)
     {
@@ -60,12 +62,12 @@ public static class TwoFactorCodes
             return disableResult;
         }
 
-        var removeCodesResult = await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, RecoveryCodesTokenName);
-        if (!removeCodesResult.Succeeded)
+        var removeKeyResult = await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, AuthenticatorKeyTokenName);
+        if (!removeKeyResult.Succeeded)
         {
-            return removeCodesResult;
+            return removeKeyResult;
         }
 
-        return await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, AuthenticatorKeyTokenName);
+        return await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, RecoveryCodesTokenName);
     }
 }

@@ -21,7 +21,10 @@ public class TwoFactorRecoveryCodesResponse
 
 public class EnableTwoFactorRequest
 {
+    public const int MaxCodeLength = 16;
+
     [Required]
+    [StringLength(MaxCodeLength)]
     public string Code { get; set; } = string.Empty;
 }
 

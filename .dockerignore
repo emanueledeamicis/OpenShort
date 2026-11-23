@@ -1,0 +1,24 @@
+# Read when the build context is the repository root: docker build -f backend/Dockerfile .
+# Unlike .gitignore, a pattern only matches at the root unless it starts with **/
+
+# Leave everything out, then let in only what backend/Dockerfile copies
+*
+!backend/src
+!frontend
+!nginx.conf
+!supervisord.conf
+
+# Build output and local files inside those folders
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+**/.vs
+**/.vscode
+**/*.user
+**/*.suo
+**/*.log
+**/.env
+**/.env.*
+**/openshort.db*

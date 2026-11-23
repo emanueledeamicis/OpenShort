@@ -2,9 +2,9 @@
 # Same major version as frontend/.nvmrc, which the CI reads
 FROM node:24 AS frontend-build
 WORKDIR /app
-COPY ../frontend/package*.json ./
+COPY frontend/package*.json ./
 RUN npm ci
-COPY ../frontend/ .
+COPY frontend/ .
 RUN npm run build -- --configuration production
 RUN ls -R /app/dist
 

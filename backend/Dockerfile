@@ -2,11 +2,10 @@
 # Same major version as frontend/.nvmrc, which the CI reads
 FROM node:24 AS frontend-build
 WORKDIR /app
-COPY ../frontend/package*.json ./
+COPY frontend/package*.json ./
 RUN npm ci
-COPY ../frontend/ .
+COPY frontend/ .
 RUN npm run build -- --configuration production
-RUN ls -R /app/dist
 
 # Stage 2: Build .NET Backend
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build

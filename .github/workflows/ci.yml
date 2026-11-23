@@ -59,3 +59,41 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build -- --configuration production
+
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Same context and Dockerfile as the release workflow, which finds these layers in the cache
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: backend/Dockerfile
+          load: true
+          tags: openshort:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Through nginx, with the embedded SQLite database: the API answers and the dashboard is served
+      - name: Start the image and check that it answers
+        run: |
+          docker run -d --name openshort -p 127.0.0.1:8081:8081 openshort:ci
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8081/api/auth/setup-status; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8081/api/auth/setup-status
+          curl -fsS http://127.0.0.1:8081/ | grep -q '<app-root'
+
+      - name: Show the container log
+        if: failure()
+        run: docker logs openshort

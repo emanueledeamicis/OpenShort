@@ -5,11 +5,12 @@ import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
 import { SecurityService, ApiKeyInfo } from '../../core/services/security.service';
+import { TwoFactorComponent } from './two-factor.component';
 
 @Component({
     selector: 'app-security',
     standalone: true,
-    imports: [CommonModule, FormsModule, ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule],
+    imports: [CommonModule, FormsModule, ReactiveFormsModule, ButtonModule, InputTextModule, MessageModule, TwoFactorComponent],
     templateUrl: './security.html'
 })
 export class SecurityComponent implements OnInit {

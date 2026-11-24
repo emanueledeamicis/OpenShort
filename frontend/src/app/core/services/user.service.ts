@@ -7,6 +7,7 @@ export interface AdminUser {
     userName: string;
     email: string | null;
     createdAt: string;
+    twoFactorEnabled: boolean;
 }
 
 export interface CreateAdminUserRequest {
@@ -32,5 +33,9 @@ export class UserService {
 
     delete(id: string): Observable<void> {
         return this.http.delete<void>(`${this.apiUrl}/${id}`);
+    }
+
+    disableTwoFactor(id: string): Observable<void> {
+        return this.http.delete<void>(`${this.apiUrl}/${id}/two-factor`);
     }
 }

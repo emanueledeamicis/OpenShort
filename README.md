@@ -382,13 +382,13 @@ The reset does not sign out sessions that are already open: a token issued befor
 
 ### Two-Factor Authentication
 
-Each user can protect their own account with the codes of an authenticator app (TOTP). It is optional and off by default.
+Each user can protect their own account with the codes of an authenticator app (TOTP). It is optional and off by default: it is turned on and off from the **Security** page of the dashboard.
 
 - When it is turned on, 10 recovery codes are shown once: each of them works one time in place of the code of the app.
 - API keys are not affected: a request with an API key never needs a code.
 - Turning it on does not sign out sessions that are already open: a token issued before stays valid until it expires, up to 7 days.
 
-If a user loses both the authenticator app and the recovery codes, another administrator can turn off two-factor authentication for them; their password does not change.
+If a user loses both the authenticator app and the recovery codes, another administrator can turn off two-factor authentication for them from the **Users** page; their password does not change.
 
 If that user is `admin` and nobody else can do it, use the optional `ADMIN_2FA_RESET` environment variable:
 

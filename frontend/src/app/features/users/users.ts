@@ -30,6 +30,7 @@ export class UsersComponent implements OnInit, OnDestroy {
     private static readonly loadUsersErrorMessage = 'Unable to load admin users.';
     private static readonly createUserErrorMessage = 'Failed to create admin user. Please try again.';
     private static readonly deleteUserErrorMessage = 'Failed to delete admin user. Please try again.';
+    private static readonly disableTwoFactorErrorMessage = 'Failed to turn off two-factor authentication. Please try again.';
 
     users: AdminUser[] = [];
     loading = false;
@@ -40,6 +41,8 @@ export class UsersComponent implements OnInit, OnDestroy {
     successMessage = '';
     showCreateDialog = false;
     showDeleteConfirm = false;
+    showTwoFactorConfirm = false;
+    disablingTwoFactor = false;
     selectedUser: AdminUser | null = null;
     currentUserId: string | null = null;
     userForm: FormGroup;
@@ -176,6 +179,48 @@ export class UsersComponent implements OnInit, OnDestroy {
                 this.deleting = false;
                 this.pageErrorMessage = this.extractApiErrorMessage(err, UsersComponent.deleteUserErrorMessage);
                 this.cdr.detectChanges();
+            }
+        });
+
+        this.subscription.add(sub);
+    }
+
+    openTwoFactorConfirm(user: AdminUser) {
+        this.selectedUser = user;
+        this.pageErrorMessage = '';
+        this.successMessage = '';
+        this.showTwoFactorConfirm = true;
+    }
+
+    closeTwoFactorConfirm() {
+        this.showTwoFactorConfirm = false;
+        this.selectedUser = null;
+    }
+
+    confirmDisableTwoFactor() {
+        if (!this.selectedUser) {
+            return;
+        }
+
+        this.disablingTwoFactor = true;
+        this.pageErrorMessage = '';
+        this.successMessage = '';
+        this.cdr.detectChanges();
+
+        const sub = this.userService.disableTwoFactor(this.selectedUser.id).subscribe({
+            next: () => {
+                this.disablingTwoFactor = false;
+                this.showTwoFactorConfirm = false;
+                this.selectedUser = null;
+                this.successMessage = 'Two-factor authentication turned off for the user.';
+                this.loadUsers();
+            },
+            error: (err) => {
+                this.disablingTwoFactor = false;
+                this.showTwoFactorConfirm = false;
+                this.selectedUser = null;
+                this.pageErrorMessage = this.extractApiErrorMessage(err, UsersComponent.disableTwoFactorErrorMessage);
+                this.loadUsers();
             }
         });
 

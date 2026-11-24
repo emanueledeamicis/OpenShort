@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenShort.Api.Auth;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 
@@ -18,15 +19,20 @@ public class UsersController : ControllerBase
     private const string UserNotFoundMessage = "User not found.";
     private const string LastAdminDeletionForbiddenMessage = "You cannot delete the last admin user who can sign in.";
     private const string CurrentUserDeletionForbiddenMessage = "You cannot delete the currently signed-in user.";
+    private const string OwnTwoFactorMessage = "To turn off your own two-factor authentication, confirm your password in the security settings.";
+    private const string TwoFactorNotEnabledMessage = "Two-factor authentication is not enabled for this user.";
+    private const string UnexpectedTwoFactorDisableErrorMessage = "An unexpected error occurred while turning off two-factor authentication.";
     private const string UnexpectedUserCreateErrorMessage = "An unexpected error occurred while creating the user.";
     private const string UnexpectedUserDeleteErrorMessage = "An unexpected error occurred while deleting the user.";
 
     private readonly IUserService _userService;
+    private readonly TwoFactorCodeThrottle _twoFactorCodeThrottle;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService, ILogger<UsersController> logger)
+    public UsersController(IUserService userService, TwoFactorCodeThrottle twoFactorCodeThrottle, ILogger<UsersController> logger)
     {
         _userService = userService;
+        _twoFactorCodeThrottle = twoFactorCodeThrottle;
         _logger = logger;
     }
 
@@ -39,7 +45,8 @@ public class UsersController : ControllerBase
             Id = u.Id,
             UserName = u.UserName ?? string.Empty,
             Email = u.Email,
-            CreatedAt = u.CreatedAt
+            CreatedAt = u.CreatedAt,
+            TwoFactorEnabled = u.TwoFactorEnabled
         });
         
         return Ok(userDtos);
@@ -82,8 +89,7 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.Equals(currentUserId, id, StringComparison.Ordinal))
+            if (await IsCurrentUserAsync(id))
             {
                 return Problem(statusCode: StatusCodes.Status400BadRequest, detail: CurrentUserDeletionForbiddenMessage);
             }
@@ -118,6 +124,82 @@ public class UsersController : ControllerBase
             return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedUserDeleteErrorMessage);
         }
     }
+
+    /// <summary>
+    /// Turns two-factor authentication off for another administrator who lost both the authenticator app
+    /// and the recovery codes. Their password is not changed.
+    /// </summary>
+    [HttpDelete("{id}/two-factor")]
+    public async Task<IActionResult> DisableTwoFactor(string id)
+    {
+        try
+        {
+            // One's own is turned off from the two-factor endpoints, which ask for the password
+            if (await IsCurrentUserAsync(id))
+            {
+                return Problem(statusCode: StatusCodes.Status400BadRequest, detail: OwnTwoFactorMessage);
+            }
+
+            var (success, errors) = await _userService.DisableTwoFactorAsync(id);
+
+            if (success)
+            {
+                // The id is the one of the account that was found, which the database may match whatever its case
+                var user = await _userService.GetByIdAsync(id);
+                _twoFactorCodeThrottle.Reset(user?.Id ?? id);
+
+                _logger.LogWarning(
+                    "Two-factor authentication turned off for user {UserId} by administrator {AdministratorId}",
+                    id,
+                    User.FindFirstValue(ClaimTypes.NameIdentifier));
+                if (errors.Any())
+                {
+                    // What is left is replaced when the user sets two-factor authentication up again
+                    _logger.LogWarning(
+                        "The secret or the recovery codes of user {UserId} were not removed: {Errors}",
+                        id,
+                        string.Join(", ", errors.Select(error => error.Description)));
+                }
+
+                return NoContent();
+            }
+
+            if (errors.Any(e => e.Code == UserNotFoundErrorCode))
+            {
+                return Problem(statusCode: StatusCodes.Status404NotFound, detail: UserNotFoundMessage);
+            }
+
+            if (errors.Any(e => e.Code == UserService.TwoFactorNotEnabledErrorCode))
+            {
+                return Problem(statusCode: StatusCodes.Status409Conflict, detail: TwoFactorNotEnabledMessage);
+            }
+
+            _logger.LogError(
+                "Two-factor authentication was not turned off for user {UserId}: {Errors}",
+                id,
+                string.Join(", ", errors.Select(error => error.Description)));
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedTwoFactorDisableErrorMessage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error turning off two-factor authentication for user {UserId}", id);
+            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedTwoFactorDisableErrorMessage);
+        }
+    }
+
+    // The database may find an account from an id written in another case, or with spaces after it:
+    // what tells whether it is the signed-in user is the account that is found, not the text of the id
+    private async Task<bool> IsCurrentUserAsync(string id)
+    {
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.Equals(currentUserId, id, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var user = await _userService.GetByIdAsync(id);
+        return user != null && string.Equals(user.Id, currentUserId, StringComparison.Ordinal);
+    }
 }
 
 public class AdminUserDto
@@ -126,6 +208,7 @@ public class AdminUserDto
     public required string UserName { get; set; }
     public string? Email { get; set; }
     public DateTime CreatedAt { get; set; }
+    public bool TwoFactorEnabled { get; set; }
 }
 
 public class CreateUserRequest

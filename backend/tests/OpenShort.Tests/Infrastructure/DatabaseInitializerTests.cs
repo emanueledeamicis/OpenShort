@@ -15,7 +15,7 @@ using OpenShort.Infrastructure.Services;
 namespace OpenShort.Tests.Infrastructure;
 
 /// <summary>
-/// Admin password recovery tests. Each call to <see cref="StartAsync"/> behaves like an application start:
+/// Admin password and two-factor recovery tests. Each call to <see cref="StartAsync"/> behaves like an application start:
 /// it runs the real initializer, with the real migrations and Identity configuration, on a database that
 /// lives as long as the test.
 /// </summary>
@@ -23,6 +23,7 @@ namespace OpenShort.Tests.Infrastructure;
 public class DatabaseInitializerTests
 {
     private const string ResetVariable = "ADMIN_PASSWORD_RESET";
+    private const string TwoFactorResetVariable = "ADMIN_2FA_RESET";
     private const string CurrentPassword = "CurrentPass123!";
     private const string NewPassword = "Temporary-Passw0rd";
     private const string OtherAdminEmail = "owner@example.com";
@@ -394,6 +395,269 @@ public class DatabaseInitializerTests
         (await IsSetupRequiredAsync()).Should().BeTrue();
     }
 
+    [TestCase("true")]
+    [TestCase("TRUE")]
+    [TestCase(" True ")]
+    public async Task Initialize_ShouldTurnOffTwoFactorOfTheAdmin_WhenTheTwoFactorResetIsSet(string value)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(resetPassword: null, twoFactorReset: value);
+
+        // Assert: nothing of the second factor is left, and the password is the same
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeTrue();
+        (await IsSetupRequiredAsync()).Should().BeFalse();
+        var warning = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level >= LogLevel.Warning).Which;
+        warning.Level.Should().Be(LogLevel.Warning);
+        warning.Message.Should().Contain(TwoFactorResetVariable);
+        warning.Message.Should().Contain("Remove the variable");
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    [TestCase("false")]
+    public async Task Initialize_ShouldKeepTwoFactorOfTheAdmin_WhenTheTwoFactorResetIsNotAsked(string? value)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(resetPassword: null, twoFactorReset: value);
+
+        // Assert
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((true, true, RecoveryCodeCount));
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+    }
+
+    [TestCase("yes")]
+    [TestCase("1")]
+    [TestCase("\"true\"")]
+    public async Task Initialize_ShouldKeepTwoFactorOfTheAdminAndLogError_WhenTheTwoFactorResetIsNotValid(string value)
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(resetPassword: null, twoFactorReset: value);
+
+        // Assert
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((true, true, RecoveryCodeCount));
+        var error = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain(TwoFactorResetVariable);
+        error.Message.Should().Contain("unchanged");
+    }
+
+    [Test]
+    public async Task Initialize_ShouldChangeNothing_WhenTheTwoFactorResetIsSetAndTwoFactorIsOff()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        _loggerProvider.Entries.Clear();
+
+        // Act: twice, as with a variable left in place
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+        (await CheckAdminPasswordAsync(CurrentPassword)).Should().BeTrue();
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+        _loggerProvider.Entries.Where(entry => entry.Message.Contains(TwoFactorResetVariable)).Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task Initialize_ShouldTurnOffTwoFactorAgain_WhileTheTwoFactorResetIsSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+
+        // Act
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+    }
+
+    [Test]
+    public async Task Initialize_ShouldNotTouchOtherAdministrators_WhenTheTwoFactorResetIsSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await WithScopeAsync(async services =>
+        {
+            var userService = new UserService(services.GetRequiredService<UserManager<AppUser>>());
+            return (await userService.CreateAdminAsync(OtherAdminEmail, OtherAdminPassword)).User != null;
+        });
+        await EnableTwoFactorAsync(OtherAdminEmail);
+
+        // Act
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        (await GetTwoFactorStateAsync(OtherAdminEmail)).Should().Be((true, true, RecoveryCodeCount));
+    }
+
+    [Test]
+    public async Task Initialize_ShouldNotRecreateAdmin_WhenAdminWasDeletedAndTheTwoFactorResetIsSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        await EnableTwoFactorAsync(OtherAdminEmail);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        (await AdminExistsAsync()).Should().BeFalse();
+        (await GetTwoFactorStateAsync(OtherAdminEmail)).Should().Be((true, true, RecoveryCodeCount));
+        _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level >= LogLevel.Warning)
+            .Which.Message.Should().Contain(TwoFactorResetVariable);
+    }
+
+    [Test]
+    public async Task Initialize_ShouldApplyBothRecoveries_WhenThePasswordAndTheTwoFactorResetAreSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+
+        // Act
+        await StartAsync(NewPassword, twoFactorReset: "true");
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+    }
+
+    [Test]
+    public async Task Initialize_ShouldKeepTwoFactorOfTheAdmin_WhenOnlyThePasswordIsReset()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+
+        // Act
+        await StartAsync(NewPassword);
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((true, true, RecoveryCodeCount));
+    }
+
+    [Test]
+    public async Task Initialize_ShouldKeepTwoFactorOfTheAdminAndLogError_WhenTurningItOffFails()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(resetPassword: null, failUserSave: true, twoFactorReset: "true");
+
+        // Assert
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((true, true, RecoveryCodeCount));
+        var error = _loggerProvider.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain(RejectingUserValidator.ErrorDescription);
+    }
+
+    [Test]
+    public async Task Initialize_ShouldSayThatTwoFactorIsOff_WhenRemovingTheSecretFails_AndRemoveItAtTheNextStart()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+        _loggerProvider.Entries.Clear();
+
+        // Act: the save that turns it off goes through, the next one does not
+        await StartAsync(resetPassword: null, twoFactorReset: "true", userSavesBeforeFailure: 1);
+        var stateAfterTheFailure = await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName);
+        var entriesAfterTheFailure = _loggerProvider.Entries.ToList();
+        _loggerProvider.Entries.Clear();
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        stateAfterTheFailure.Should().Be((false, true, RecoveryCodeCount));
+        entriesAfterTheFailure.Should().ContainSingle(entry => entry.Level == LogLevel.Warning)
+            .Which.Message.Should().Contain("was turned off");
+        var error = entriesAfterTheFailure.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain("not removed");
+        error.Message.Should().Contain(RejectingUserValidator.ErrorDescription);
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+        _loggerProvider.Entries.Should().ContainSingle(entry => entry.Message.Contains("were removed"));
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRecreateAdminWithPasswordAndWithoutTwoFactor_WhenAdminWasDeletedAndBothRecoveriesAreSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        await EnableTwoFactorAsync(OtherAdminEmail);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(NewPassword, twoFactorReset: "true");
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+        (await GetTwoFactorStateAsync(OtherAdminEmail)).Should().Be((true, true, RecoveryCodeCount));
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+    }
+
+    [Test]
+    public async Task Initialize_ShouldKeepSetupRequired_WhenAdminHasNoPasswordAndTheTwoFactorResetIsSet()
+    {
+        // Act: a new installation started with the variable already in place
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        (await IsSetupRequiredAsync()).Should().BeTrue();
+        (await AdminHasPasswordAsync()).Should().BeFalse();
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+    }
+
+    private const int RecoveryCodeCount = 10;
+
+    // Same steps as the two-factor endpoints: a secret, the recovery codes, then the flag
+    private Task EnableTwoFactorAsync(string userName) => WithScopeAsync(async services =>
+    {
+        var userManager = services.GetRequiredService<UserManager<AppUser>>();
+        var user = await userManager.FindByNameAsync(userName);
+        (await userManager.ResetAuthenticatorKeyAsync(user!)).Succeeded.Should().BeTrue();
+        (await userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, RecoveryCodeCount)).Should().HaveCount(RecoveryCodeCount);
+        (await userManager.SetTwoFactorEnabledAsync(user!, true)).Succeeded.Should().BeTrue();
+        return true;
+    });
+
+    private Task<(bool IsEnabled, bool HasSecret, int RecoveryCodes)> GetTwoFactorStateAsync(string userName) =>
+        WithScopeAsync(async services =>
+        {
+            var userManager = services.GetRequiredService<UserManager<AppUser>>();
+            var user = await userManager.FindByNameAsync(userName);
+            return (
+                await userManager.GetTwoFactorEnabledAsync(user!),
+                await userManager.GetAuthenticatorKeyAsync(user!) != null,
+                await userManager.CountRecoveryCodesAsync(user!));
+        });
+
     // Same steps as the dashboard: create a second administrator, then delete the default one
     private Task CreateOtherAdminAndDeleteDefaultAdminAsync() => WithScopeAsync(async services =>
     {
@@ -452,9 +716,13 @@ public class DatabaseInitializerTests
             .SetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, "false");
     }
 
-    private async Task StartAsync(string? resetPassword, bool failUserSave = false)
+    private async Task StartAsync(
+        string? resetPassword,
+        bool failUserSave = false,
+        string? twoFactorReset = null,
+        int userSavesBeforeFailure = 0)
     {
-        await using var provider = BuildProvider(resetPassword, failUserSave);
+        await using var provider = BuildProvider(resetPassword, failUserSave || userSavesBeforeFailure > 0, twoFactorReset, userSavesBeforeFailure);
         using var scope = provider.CreateScope();
         await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
     }
@@ -486,10 +754,18 @@ public class DatabaseInitializerTests
     }
 
     // Same registrations as Program.cs for the services the initializer uses
-    private ServiceProvider BuildProvider(string? resetPassword, bool failUserSave = false)
+    private ServiceProvider BuildProvider(
+        string? resetPassword,
+        bool failUserSave = false,
+        string? twoFactorReset = null,
+        int userSavesBeforeFailure = 0)
     {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { [ResetVariable] = resetPassword })
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [ResetVariable] = resetPassword,
+                [TwoFactorResetVariable] = twoFactorReset
+            })
             .Build();
 
         var services = new ServiceCollection();
@@ -501,7 +777,7 @@ public class DatabaseInitializerTests
             .AddEntityFrameworkStores<AppDbContext>();
         if (failUserSave)
         {
-            services.AddScoped<IUserValidator<AppUser>, RejectingUserValidator>();
+            services.AddScoped<IUserValidator<AppUser>>(_ => new RejectingUserValidator(userSavesBeforeFailure));
         }
 
         services.AddScoped<ISettingService, SettingService>();
@@ -511,12 +787,17 @@ public class DatabaseInitializerTests
     }
 
     // Identity runs the user validators before every save of a user: rejecting here makes the save fail
-    private sealed class RejectingUserValidator : IUserValidator<AppUser>
+    // The first saves can be let through, to make a later one fail
+    private sealed class RejectingUserValidator(int savesBeforeFailure) : IUserValidator<AppUser>
     {
         public const string ErrorDescription = "Save rejected by the test.";
 
+        private int _saves;
+
         public Task<IdentityResult> ValidateAsync(UserManager<AppUser> manager, AppUser user) =>
-            Task.FromResult(IdentityResult.Failed(new IdentityError { Code = "TestFailure", Description = ErrorDescription }));
+            Task.FromResult(++_saves <= savesBeforeFailure
+                ? IdentityResult.Success
+                : IdentityResult.Failed(new IdentityError { Code = "TestFailure", Description = ErrorDescription }));
     }
 
     private sealed record LogEntry(LogLevel Level, string Message);

@@ -16,6 +16,7 @@ using OpenShort.Api.Models;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Data;
+using OpenShort.Infrastructure.Services;
 
 namespace OpenShort.Tests.Api;
 
@@ -715,7 +716,7 @@ public class AuthControllerLoginTests
         // Arrange
         await EnableTwoFactorAsync();
         var user = await _userManager.FindByNameAsync(UserName);
-        (await TwoFactorCodes.DisableAsync(_userManager, user!)).Succeeded.Should().BeTrue();
+        (await TwoFactorAccounts.DisableAsync(_userManager, user!)).IsComplete.Should().BeTrue();
 
         // Act
         var result = await LoginAsync(Password);

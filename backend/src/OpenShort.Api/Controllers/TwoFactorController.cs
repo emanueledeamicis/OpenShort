@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using OpenShort.Api.Auth;
 using OpenShort.Api.Models;
 using OpenShort.Core.Entities;
+using OpenShort.Infrastructure.Services;
 
 namespace OpenShort.Api.Controllers;
 
@@ -30,11 +31,16 @@ public class TwoFactorController : ControllerBase
     private const string UnexpectedErrorMessage = "An unexpected error occurred while updating two-factor authentication.";
 
     private readonly UserManager<AppUser> _userManager;
+    private readonly TwoFactorCodeThrottle _twoFactorCodeThrottle;
     private readonly ILogger<TwoFactorController> _logger;
 
-    public TwoFactorController(UserManager<AppUser> userManager, ILogger<TwoFactorController> logger)
+    public TwoFactorController(
+        UserManager<AppUser> userManager,
+        TwoFactorCodeThrottle twoFactorCodeThrottle,
+        ILogger<TwoFactorController> logger)
     {
         _userManager = userManager;
+        _twoFactorCodeThrottle = twoFactorCodeThrottle;
         _logger = logger;
     }
 
@@ -206,10 +212,22 @@ public class TwoFactorController : ControllerBase
             return BadRequest(new { message = IncorrectPasswordMessage });
         }
 
-        var disableResult = await TwoFactorCodes.DisableAsync(_userManager, user);
-        if (!disableResult.Succeeded)
+        var disableResult = await TwoFactorAccounts.DisableAsync(_userManager, user);
+        if (!disableResult.IsDisabled)
         {
             return UnexpectedError(user, disableResult.Errors);
+        }
+
+        _twoFactorCodeThrottle.Reset(user.Id);
+
+        if (!disableResult.IsComplete)
+        {
+            // It is off, which is what was asked: what is left is replaced by the next setup
+            _logger.LogWarning(
+                "Two-factor authentication disabled for user {UserId}, but the secret or the recovery codes were not removed: {Errors}",
+                user.Id,
+                string.Join(", ", disableResult.Errors.Select(error => error.Description)));
+            return Ok(new { message = DisabledMessage });
         }
 
         _logger.LogInformation("Two-factor authentication disabled for user {UserId}", user.Id);

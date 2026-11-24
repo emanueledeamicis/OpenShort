@@ -124,6 +124,92 @@ public class UserServiceTests
         errors.Should().ContainSingle(error => error.Code == LastAdminDeletionForbiddenErrorCode);
     }
 
+    [Test]
+    public async Task DisableTwoFactor_ShouldTurnItOffAndRemoveTheSecretAndTheRecoveryCodes()
+    {
+        // Arrange
+        var user = await CreateAdminAsync("owner@example.com", Password);
+        await EnableTwoFactorAsync(user);
+
+        // Act
+        var (success, _) = await _userService.DisableTwoFactorAsync(user.Id);
+
+        // Assert
+        success.Should().BeTrue();
+        var saved = await _userManager.FindByIdAsync(user.Id);
+        (await _userManager.GetTwoFactorEnabledAsync(saved!)).Should().BeFalse();
+        (await _userManager.GetAuthenticatorKeyAsync(saved!)).Should().BeNull();
+        (await _userManager.CountRecoveryCodesAsync(saved!)).Should().Be(0);
+        (await _userManager.CheckPasswordAsync(saved!, Password)).Should().BeTrue();
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldNotTouchAnotherUser()
+    {
+        // Arrange
+        var user = await CreateAdminAsync("owner@example.com", Password);
+        var other = await CreateAdminAsync("other@example.com", Password);
+        await EnableTwoFactorAsync(user);
+        await EnableTwoFactorAsync(other);
+
+        // Act
+        await _userService.DisableTwoFactorAsync(user.Id);
+
+        // Assert
+        (await _userManager.GetTwoFactorEnabledAsync(other)).Should().BeTrue();
+        (await _userManager.GetAuthenticatorKeyAsync(other)).Should().NotBeNull();
+        (await _userManager.CountRecoveryCodesAsync(other)).Should().Be(3);
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldFail_WhenItIsNotEnabled()
+    {
+        // Arrange
+        var user = await CreateAdminAsync("owner@example.com", Password);
+
+        // Act
+        var (success, errors) = await _userService.DisableTwoFactorAsync(user.Id);
+
+        // Assert
+        success.Should().BeFalse();
+        errors.Should().ContainSingle(error => error.Code == UserService.TwoFactorNotEnabledErrorCode);
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldFail_WhenTheUserDoesNotExist()
+    {
+        // Act
+        var (success, errors) = await _userService.DisableTwoFactorAsync("missing-id");
+
+        // Assert
+        success.Should().BeFalse();
+        errors.Should().ContainSingle(error => error.Code == "NotFound");
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldFail_WhenTheUserIsNotAnAdministrator()
+    {
+        // Arrange: the users endpoints manage administrators only
+        var user = new AppUser { UserName = "plain@example.com", CreatedAt = DateTime.UtcNow };
+        (await _userManager.CreateAsync(user, Password)).Succeeded.Should().BeTrue();
+        await EnableTwoFactorAsync(user);
+
+        // Act
+        var (success, errors) = await _userService.DisableTwoFactorAsync(user.Id);
+
+        // Assert
+        success.Should().BeFalse();
+        errors.Should().ContainSingle(error => error.Code == "NotFound");
+        (await _userManager.GetTwoFactorEnabledAsync(user)).Should().BeTrue();
+    }
+
+    private async Task EnableTwoFactorAsync(AppUser user)
+    {
+        (await _userManager.ResetAuthenticatorKeyAsync(user)).Succeeded.Should().BeTrue();
+        (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 3)).Should().HaveCount(3);
+        (await _userManager.SetTwoFactorEnabledAsync(user, true)).Succeeded.Should().BeTrue();
+    }
+
     private async Task<AppUser> CreateAdminAsync(string userName, string? password)
     {
         var user = new AppUser { UserName = userName, CreatedAt = DateTime.UtcNow };

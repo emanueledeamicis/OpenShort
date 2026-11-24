@@ -31,6 +31,7 @@ public class TwoFactorControllerTests
     private ServiceProvider _serviceProvider = null!;
     private UserManager<AppUser> _userManager = null!;
     private AppUser _user = null!;
+    private TwoFactorCodeThrottle _twoFactorCodeThrottle = null!;
     private TwoFactorController _controller = null!;
 
     [SetUp]
@@ -50,7 +51,8 @@ public class TwoFactorControllerTests
         _user = new AppUser { UserName = UserName, CreatedAt = DateTime.UtcNow };
         (await _userManager.CreateAsync(_user, Password)).Succeeded.Should().BeTrue();
 
-        _controller = new TwoFactorController(_userManager, NullLogger<TwoFactorController>.Instance)
+        _twoFactorCodeThrottle = new TwoFactorCodeThrottle(TimeProvider.System, NullLogger<LoginThrottle>.Instance);
+        _controller = new TwoFactorController(_userManager, _twoFactorCodeThrottle, NullLogger<TwoFactorController>.Instance)
         {
             ControllerContext = new ControllerContext
             {
@@ -374,6 +376,24 @@ public class TwoFactorControllerTests
         (await GetStatusAsync()).IsEnabled.Should().BeFalse();
         (await _userManager.GetAuthenticatorKeyAsync(_user)).Should().BeNull();
         (await _userManager.CountRecoveryCodesAsync(_user)).Should().Be(0);
+    }
+
+    [Test]
+    public async Task Disable_ShouldForgetTheWrongCodesOfTheLogin()
+    {
+        // Arrange: enough wrong codes at login to have a delay pending
+        await EnableAsync();
+        for (var failures = 0; failures < 10; failures++)
+        {
+            await _twoFactorCodeThrottle.AttemptAsync(_user.Id, () => Task.FromResult(false));
+        }
+
+        // Act
+        await _controller.Disable(new TwoFactorPasswordRequest { Password = Password });
+
+        // Assert: after turning it on again, the first code is checked
+        var attempt = await _twoFactorCodeThrottle.AttemptAsync(_user.Id, () => Task.FromResult(true));
+        attempt.Succeeded.Should().BeTrue();
     }
 
     [Test]

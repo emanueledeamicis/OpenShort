@@ -47,6 +47,8 @@ public class AuthControllerTests
             _userManagerMock.Object,
             _tokenServiceMock.Object,
             new LoginThrottle(TimeProvider.System, NullLogger<LoginThrottle>.Instance),
+            new TwoFactorCodeThrottle(TimeProvider.System, NullLogger<LoginThrottle>.Instance),
+            new UsedTwoFactorCodes(TimeProvider.System),
             _settingServiceMock.Object,
             _loggerMock.Object)
         {

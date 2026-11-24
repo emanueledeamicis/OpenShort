@@ -17,6 +17,8 @@ namespace OpenShort.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private const string InvalidCredentialsMessage = "Invalid username/email or password";
+    private const string TwoFactorCodeRequiredMessage = "Enter the code from your authenticator app.";
+    private const string InvalidTwoFactorCodeMessage = "The code is not valid.";
     private const string LoginDelayedMessageFormat = "Too many failed login attempts. Try again in {0} second(s).";
     private const string PasswordConfirmationMismatchMessage = "Password and confirmation do not match.";
     private const string InitialAdminSetupCompletedMessage = "Initial admin setup has already been completed.";
@@ -30,6 +32,8 @@ public class AuthController : ControllerBase
     private readonly UserManager<AppUser> _userManager;
     private readonly ITokenService _tokenService;
     private readonly LoginThrottle _loginThrottle;
+    private readonly TwoFactorCodeThrottle _twoFactorCodeThrottle;
+    private readonly UsedTwoFactorCodes _usedTwoFactorCodes;
     private readonly ISettingService _settingService;
     private readonly ILogger<AuthController> _logger;
 
@@ -37,12 +41,16 @@ public class AuthController : ControllerBase
         UserManager<AppUser> userManager,
         ITokenService tokenService,
         LoginThrottle loginThrottle,
+        TwoFactorCodeThrottle twoFactorCodeThrottle,
+        UsedTwoFactorCodes usedTwoFactorCodes,
         ISettingService settingService,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _tokenService = tokenService;
         _loginThrottle = loginThrottle;
+        _twoFactorCodeThrottle = twoFactorCodeThrottle;
+        _usedTwoFactorCodes = usedTwoFactorCodes;
         _settingService = settingService;
         _logger = logger;
     }
@@ -77,18 +85,47 @@ public class AuthController : ControllerBase
 
             if (attempt.RetryAfter is { } retryAfter)
             {
-                var retryAfterSeconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
-                _logger.LogWarning("Login attempt delayed after repeated failures {Identifier}", request.Identifier);
-                Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
-                return StatusCode(
-                    StatusCodes.Status429TooManyRequests,
-                    new { message = string.Format(CultureInfo.InvariantCulture, LoginDelayedMessageFormat, retryAfterSeconds) });
+                return LoginDelayed(retryAfter, request.Identifier);
             }
 
             if (!attempt.Succeeded || user == null)
             {
                 _logger.LogWarning("Login attempt failed: Invalid credentials {Identifier}", request.Identifier);
                 return Unauthorized(InvalidCredentialsMessage);
+            }
+
+            // From here on the password is known to be right
+            if (await _userManager.GetTwoFactorEnabledAsync(user))
+            {
+                if (string.IsNullOrWhiteSpace(request.Code))
+                {
+                    return Unauthorized(new TwoFactorRequiredResponse { Message = TwoFactorCodeRequiredMessage });
+                }
+
+                // Wrong codes of the app are counted on the account, whatever the address. Recovery codes are too
+                // long to be guessed: they are counted for each address like passwords, so the owner can still
+                // sign in with one while somebody else who knows the password keeps the codes of the app delayed
+                var codeAttempt = TwoFactorCodes.IsAuthenticatorCode(request.Code)
+                    ? await _twoFactorCodeThrottle.AttemptAsync(
+                        user.Id,
+                        () => TwoFactorCodes.VerifyAuthenticatorCodeForSignInAsync(_userManager, _usedTwoFactorCodes, user, request.Code),
+                        HttpContext.RequestAborted)
+                    : await _loginThrottle.AttemptAsync(
+                        GetRecoveryCodeThrottleSubject(user),
+                        ClientAddress.GetPartitionKey(HttpContext),
+                        () => TwoFactorCodes.RedeemRecoveryCodeForSignInAsync(_userManager, user, request.Code),
+                        HttpContext.RequestAborted);
+
+                if (codeAttempt.RetryAfter is { } codeRetryAfter)
+                {
+                    return LoginDelayed(codeRetryAfter, request.Identifier);
+                }
+
+                if (!codeAttempt.Succeeded)
+                {
+                    _logger.LogWarning("Login attempt failed: Invalid two-factor code {Identifier}", request.Identifier);
+                    return Unauthorized(new TwoFactorRequiredResponse { Message = InvalidTwoFactorCodeMessage });
+                }
             }
 
             var roles = await _userManager.GetRolesAsync(user);
@@ -221,6 +258,21 @@ public class AuthController : ControllerBase
             _logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
             return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedRegistrationErrorMessage);
         }
+    }
+
+    private ObjectResult LoginDelayed(TimeSpan retryAfter, string identifier)
+    {
+        var retryAfterSeconds = (int)Math.Ceiling(retryAfter.TotalSeconds);
+        _logger.LogWarning("Login attempt delayed after repeated failures {Identifier}", identifier);
+        Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+        return StatusCode(
+            StatusCodes.Status429TooManyRequests,
+            new { message = string.Format(CultureInfo.InvariantCulture, LoginDelayedMessageFormat, retryAfterSeconds) });
+    }
+
+    private static string GetRecoveryCodeThrottleSubject(AppUser user)
+    {
+        return $"recovery-code:{user.Id}";
     }
 
     // Failures are counted on the account when the identifier matches one, whatever its spelling:

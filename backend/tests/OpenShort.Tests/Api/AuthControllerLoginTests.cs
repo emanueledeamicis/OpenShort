@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Net;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -36,6 +37,7 @@ public class AuthControllerLoginTests
     private Mock<ITokenService> _tokenServiceMock = null!;
     private Mock<ISettingService> _settingServiceMock = null!;
     private ManualTimeProvider _timeProvider = null!;
+    private LoginThrottle _loginThrottle = null!;
     private AuthController _controller = null!;
 
     [SetUp]
@@ -64,10 +66,13 @@ public class AuthControllerLoginTests
 
         _settingServiceMock = new Mock<ISettingService>();
         _timeProvider = new ManualTimeProvider();
+        _loginThrottle = new LoginThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance);
         _controller = new AuthController(
             _userManager,
             _tokenServiceMock.Object,
-            new LoginThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance),
+            _loginThrottle,
+            new TwoFactorCodeThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance),
+            new UsedTwoFactorCodes(_timeProvider),
             _settingServiceMock.Object,
             new Mock<ILogger<AuthController>>().Object);
     }
@@ -367,6 +372,431 @@ public class AuthControllerLoginTests
         attribute.PolicyName.Should().Be(AuthProtection.RateLimitPolicy);
     }
 
+    [Test]
+    public async Task Login_ShouldIgnoreTheCode_WhenTwoFactorIsOff()
+    {
+        // Act
+        var result = await LoginAsync(Password, code: "123456");
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("   ")]
+    public async Task Login_ShouldAskForTheCode_WhenTwoFactorIsOnAndNoCodeIsGiven(string? code)
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+
+        // Act
+        var result = await LoginAsync(Password, code: code);
+
+        // Assert
+        ShouldAskForTheSecondFactor(result);
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnToken_WhenTheCodeOfTheAppIsValid()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+
+        // Act
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+
+        // Assert
+        var payload = result.Result.Should().BeOfType<OkObjectResult>().Which.Value as AuthResponse;
+        payload!.Token.Should().Be("token-value");
+    }
+
+    [Test]
+    public async Task Login_ShouldAcceptACodeWrittenInGroups()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        var code = TotpGenerator.Generate(sharedKey);
+
+        // Act
+        var result = await LoginAsync(Password, code: $"{code[..3]} {code[3..]}");
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [TestCase("not-a-code")]
+    [TestCase("12345")]
+    [TestCase("1234567")]
+    public async Task Login_ShouldReturnUnauthorized_WhenTheCodeIsNotValid(string code)
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+
+        // Act
+        var result = await LoginAsync(Password, code: code);
+
+        // Assert
+        ShouldAskForTheSecondFactor(result);
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnUnauthorized_WhenTheCodeOfTheAppIsWrong()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+
+        // Act
+        var result = await LoginAsync(Password, code: WrongCode(sharedKey));
+
+        // Assert
+        ShouldAskForTheSecondFactor(result);
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnUnauthorized_WhenTheCodeIsOld()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+
+        // Act
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey, DateTimeOffset.UtcNow.AddMinutes(-10)));
+
+        // Assert
+        ShouldAskForTheSecondFactor(result);
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnUnauthorized_WhenTheCodeWasAlreadyUsed()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        var code = TotpGenerator.Generate(sharedKey);
+        (await LoginAsync(Password, code: code)).Result.Should().BeOfType<OkObjectResult>();
+
+        // Act
+        var result = await LoginAsync(Password, code: code, address: OwnerAddress);
+
+        // Assert
+        ShouldAskForTheSecondFactor(result);
+    }
+
+    [Test]
+    public async Task Login_ShouldNotSayThatTheCodeIsValid_WhenThePasswordIsWrong()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        var code = TotpGenerator.Generate(sharedKey);
+
+        // Act
+        var wrongPasswordResult = await LoginAsync(WrongPassword, code: code);
+        var result = await LoginAsync(Password, code: code);
+
+        // Assert: the answer is the one of a wrong password, and the code was not used up
+        wrongPasswordResult.Result.Should().BeOfType<UnauthorizedObjectResult>().Which.Value.Should().BeOfType<string>();
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnToken_WithARecoveryCode_AndUseItUp()
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        var recoveryCodes = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 3))!.ToList();
+
+        // Act
+        var result = await LoginAsync(Password, code: $" {recoveryCodes[0].ToLowerInvariant()} ");
+        var secondResult = await LoginAsync(Password, code: recoveryCodes[0]);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+        ShouldAskForTheSecondFactor(secondResult);
+        (await _userManager.CountRecoveryCodesAsync(user!)).Should().Be(2);
+    }
+
+    [Test]
+    public async Task Login_ShouldAcceptARecoveryCode_WrittenWithoutTheHyphenOrWithSpaces()
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        var recoveryCodes = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 2))!.ToList();
+        var withoutHyphen = recoveryCodes[0].Replace("-", string.Empty);
+        var withSpaces = recoveryCodes[1].Replace("-", " - ");
+
+        // Act
+        var withoutHyphenResult = await LoginAsync(Password, code: withoutHyphen);
+        var withSpacesResult = await LoginAsync(Password, code: withSpaces);
+
+        // Assert
+        withoutHyphenResult.Result.Should().BeOfType<OkObjectResult>();
+        withSpacesResult.Result.Should().BeOfType<OkObjectResult>();
+        (await _userManager.CountRecoveryCodesAsync(user!)).Should().Be(0);
+    }
+
+    [Test]
+    public async Task Login_ShouldDelayTheCodes_AfterRepeatedWrongCodes_FromEveryAddress()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        await FailTwoFactorAsync(sharedKey, times: 3);
+
+        // Act: the right code, from the same address and from another one
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+        var otherAddressResult = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey), address: OwnerAddress);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        otherAddressResult.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        _controller.Response.Headers.RetryAfter.ToString().Should().Be("1");
+        _tokenServiceMock.Verify(
+            service => service.CreateTokenAsync(It.IsAny<AppUser>(), It.IsAny<IList<string>>()),
+            Times.Never);
+    }
+
+    [Test]
+    public async Task Login_ShouldAcceptTheCode_WhenTheDelayHasElapsed()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        await FailTwoFactorAsync(sharedKey, times: 3);
+        _timeProvider.Advance(LoginThrottle.GetDelay(3));
+
+        // Act
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldForgetTheWrongCodes_AfterARightOne()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        await FailTwoFactorAsync(sharedKey, times: 2);
+        (await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey))).Result.Should().BeOfType<OkObjectResult>();
+        await FailTwoFactorAsync(sharedKey, times: 2);
+
+        // Act: a code is accepted once, so this is the one of the next half minute
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey, DateTimeOffset.UtcNow.AddSeconds(30)));
+
+        // Assert: without the reset the four failures would have caused a delay
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldDelayTheCodes_WhenTheTableOfFailedLoginsIsFull()
+    {
+        // Arrange: failed logins on made-up names fill the table shared by the passwords
+        var sharedKey = await EnableTwoFactorAsync();
+        for (var client = 0; client < LoginThrottle.MaxTrackedClients; client++)
+        {
+            await _loginThrottle.AttemptAsync($"identifier:made-up-{client}", AttackerAddress, () => Task.FromResult(false));
+        }
+
+        await FailTwoFactorAsync(sharedKey, times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldAcceptARecoveryCode_WhileTheCodesOfTheAppAreDelayed()
+    {
+        // Arrange: somebody who knows the password keeps the codes of the app delayed
+        var sharedKey = await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        var recoveryCode = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 1))!.Single();
+        await FailTwoFactorAsync(sharedKey, times: 3);
+
+        // Act: the owner, from the same address and from another one
+        var appCodeResult = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey), address: OwnerAddress);
+        var result = await LoginAsync(Password, code: recoveryCode, address: OwnerAddress);
+
+        // Assert
+        appCodeResult.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldDelayRecoveryCodes_AfterRepeatedWrongOnes_FromTheSameAddressOnly()
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        var recoveryCodes = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 2))!.ToList();
+        await FailRecoveryCodeAsync(times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, code: recoveryCodes[0]);
+        var otherAddressResult = await LoginAsync(Password, code: recoveryCodes[1], address: OwnerAddress);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        otherAddressResult.Result.Should().BeOfType<OkObjectResult>();
+        (await _userManager.CountRecoveryCodesAsync(user!)).Should().Be(1);
+    }
+
+    [Test]
+    public async Task Login_ShouldNotDelayTheCodesOfTheApp_AfterWrongRecoveryCodes()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        await FailRecoveryCodeAsync(times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldNotCountAMissingCodeAsAFailure()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            ShouldAskForTheSecondFactor(await LoginAsync(Password));
+        }
+
+        // Act
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldNotResetTheCountOfWrongCodes_WhenThePasswordAloneIsSentAgain()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        await FailTwoFactorAsync(sharedKey, times: 3);
+
+        // Act
+        ShouldAskForTheSecondFactor(await LoginAsync(Password));
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldNotDelayAnotherAccount_WhenWrongCodesAreSentForOne()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        await CreateAdministratorAsync("second@example.com", Password);
+        await FailTwoFactorAsync(sharedKey, times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, identifier: "second@example.com");
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldNotAskForTheCode_AfterTwoFactorWasTurnedOff()
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        (await TwoFactorCodes.DisableAsync(_userManager, user!)).Succeeded.Should().BeTrue();
+
+        // Act
+        var result = await LoginAsync(Password);
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public void LoginRequest_ShouldLimitTheLengthOfTheCode()
+    {
+        // Arrange
+        var request = new LoginRequest
+        {
+            Identifier = UserName,
+            Password = Password,
+            Code = new string('1', LoginRequest.MaxCodeLength + 1)
+        };
+
+        // Act
+        var isValid = Validator.TryValidateObject(request, new ValidationContext(request), null, validateAllProperties: true);
+
+        // Assert
+        isValid.Should().BeFalse();
+    }
+
+    // Turns two-factor authentication on for the test user and returns the secret of the authenticator app
+    private async Task<string> EnableTwoFactorAsync()
+    {
+        var user = await _userManager.FindByNameAsync(UserName);
+        (await _userManager.ResetAuthenticatorKeyAsync(user!)).Succeeded.Should().BeTrue();
+        (await _userManager.SetTwoFactorEnabledAsync(user!, true)).Succeeded.Should().BeTrue();
+        return (await _userManager.GetAuthenticatorKeyAsync(user!))!;
+    }
+
+    // Six digits that are not a code the application would accept now
+    private static string WrongCode(string sharedKey)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var acceptedCodes = Enumerable.Range(-3, 7)
+            .Select(step => TotpGenerator.Generate(sharedKey, now.AddSeconds(step * 30)))
+            .ToHashSet();
+
+        return Enumerable.Range(0, 10).Select(number => number.ToString("D6")).First(code => !acceptedCodes.Contains(code));
+    }
+
+    // Sends wrong codes of the authenticator app
+    private async Task FailTwoFactorAsync(string sharedKey, int times)
+    {
+        for (var failures = 1; failures <= times; failures++)
+        {
+            ShouldAskForTheSecondFactor(await LoginAsync(Password, code: WrongCode(sharedKey)));
+
+            // Wait out the delay between attempts; the delay caused by the last failure is left pending
+            if (failures < times)
+            {
+                _timeProvider.Advance(LoginThrottle.GetDelay(failures));
+            }
+        }
+    }
+
+    private async Task FailRecoveryCodeAsync(int times)
+    {
+        for (var failures = 1; failures <= times; failures++)
+        {
+            ShouldAskForTheSecondFactor(await LoginAsync(Password, code: "not-a-code"));
+
+            if (failures < times)
+            {
+                _timeProvider.Advance(LoginThrottle.GetDelay(failures));
+            }
+        }
+    }
+
+    private void ShouldAskForTheSecondFactor(ActionResult<AuthResponse> result)
+    {
+        result.Result.Should().BeOfType<UnauthorizedObjectResult>()
+            .Which.Value.Should().BeOfType<TwoFactorRequiredResponse>()
+            .Which.RequiresTwoFactor.Should().BeTrue();
+    }
+
     private async Task CreateAdministratorAsync(string email, string? password)
     {
         var roleManager = _serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
@@ -386,11 +816,12 @@ public class AuthControllerLoginTests
     private Task<ActionResult<AuthResponse>> LoginAsync(
         string password,
         string identifier = UserName,
-        string address = AttackerAddress)
+        string address = AttackerAddress,
+        string? code = null)
     {
         SetClientAddress(address);
 
-        return _controller.Login(new LoginRequest { Identifier = identifier, Password = password });
+        return _controller.Login(new LoginRequest { Identifier = identifier, Password = password, Code = code });
     }
 
     private void SetClientAddress(string address)

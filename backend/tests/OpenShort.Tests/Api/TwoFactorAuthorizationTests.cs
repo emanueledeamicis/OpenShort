@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -25,13 +26,14 @@ using OpenShort.Infrastructure.Data;
 namespace OpenShort.Tests.Api;
 
 /// <summary>
-/// Runs the two-factor controller on an in-memory server, with Identity, the two authentication schemes
-/// and the rate limiter registered as in Program.cs.
+/// Runs the two-factor controller and the login on an in-memory server, with Identity, the two
+/// authentication schemes and the rate limiter registered as in Program.cs.
 /// </summary>
 [TestFixture]
 public class TwoFactorAuthorizationTests
 {
     private const string TwoFactorPath = "/api/security/two-factor";
+    private const string LoginPath = "/api/auth/login";
     private const string Password = "StrongPass123!";
     private const string ValidApiKey = "os_valid-key-for-the-test";
     private const string SigningKey = "signing-key-used-only-by-this-test-0123456789";
@@ -52,6 +54,18 @@ public class TwoFactorAuthorizationTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
         builder.Services.AddSingleton(apiKeyServiceMock.Object);
+
+        // What the login needs, as in Program.cs; the token itself is not under test
+        var tokenServiceMock = new Mock<ITokenService>();
+        tokenServiceMock
+            .Setup(service => service.CreateTokenAsync(It.IsAny<AppUser>(), It.IsAny<IList<string>>()))
+            .ReturnsAsync("token-value");
+        builder.Services.AddSingleton(tokenServiceMock.Object);
+        builder.Services.AddSingleton(new Mock<ISettingService>().Object);
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<LoginThrottle>();
+        builder.Services.AddSingleton<TwoFactorCodeThrottle>();
+        builder.Services.AddSingleton<UsedTwoFactorCodes>();
         builder.Services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(databaseName));
         builder.Services.AddControllers().AddApplicationPart(typeof(TwoFactorController).Assembly);
 
@@ -203,6 +217,52 @@ public class TwoFactorAuthorizationTests
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         (await IsTwoFactorTouchedAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Login_ShouldAnswerWithTheTwoFactorRequest_AndThenWithTheToken()
+    {
+        // Arrange
+        var token = CreateToken();
+        using var setupResponse = await SendAsync("POST", "/setup", new { password = Password }, token);
+        var setup = await setupResponse.Content.ReadFromJsonAsync<TwoFactorSetupResponse>();
+        using var enableResponse = await SendAsync("POST", "/enable", new { code = TotpGenerator.Generate(setup!.SharedKey) }, token);
+        enableResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Act: the code that turned two-factor authentication on did not open a session, so it still works
+        using var passwordOnlyResponse = await _client.PostAsJsonAsync(LoginPath, new { identifier = "admin", password = Password });
+        var passwordOnly = await passwordOnlyResponse.Content.ReadFromJsonAsync<JsonElement>();
+        using var wrongCodeResponse = await _client.PostAsJsonAsync(
+            LoginPath,
+            new { identifier = "admin", password = Password, code = "not-a-code" });
+        var wrongCode = await wrongCodeResponse.Content.ReadFromJsonAsync<JsonElement>();
+        using var loginResponse = await _client.PostAsJsonAsync(
+            LoginPath,
+            new { identifier = "admin", password = Password, code = TotpGenerator.Generate(setup.SharedKey) });
+        var login = await loginResponse.Content.ReadFromJsonAsync<JsonElement>();
+
+        // Assert: the names the dashboard reads
+        passwordOnlyResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        passwordOnly.GetProperty("requiresTwoFactor").GetBoolean().Should().BeTrue();
+        passwordOnly.GetProperty("message").GetString().Should().NotBeNullOrEmpty();
+        passwordOnly.TryGetProperty("token", out _).Should().BeFalse();
+        wrongCodeResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        wrongCode.GetProperty("requiresTwoFactor").GetBoolean().Should().BeTrue();
+        wrongCode.GetProperty("message").GetString().Should().NotBeNullOrEmpty();
+        loginResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        login.GetProperty("token").GetString().Should().Be("token-value");
+    }
+
+    [Test]
+    public async Task Login_ShouldReturnBadRequest_WhenTheCodeIsTooLong()
+    {
+        // Act
+        using var response = await _client.PostAsJsonAsync(
+            LoginPath,
+            new { identifier = "admin", password = Password, code = new string('1', LoginRequest.MaxCodeLength + 1) });
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     private Task<HttpResponseMessage> SendAsync(string method, string path, object? body, string? token = null, string? apiKey = null)

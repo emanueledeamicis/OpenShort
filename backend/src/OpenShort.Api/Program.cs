@@ -152,6 +152,10 @@ builder.Services.AddIdentityCore<AppUser>(OpenShort.Api.Auth.AuthProtection.Conf
 // Delays repeated failed logins; state is in memory, hence the singleton
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<OpenShort.Api.Auth.LoginThrottle>();
+builder.Services.AddSingleton<OpenShort.Api.Auth.TwoFactorCodeThrottle>();
+
+// Authenticator codes that already opened a session; in memory as well
+builder.Services.AddSingleton<OpenShort.Api.Auth.UsedTwoFactorCodes>();
 
 // Limits the request rate on the endpoints marked with the auth policy (login, admin setup)
 builder.Services.AddRateLimiter(OpenShort.Api.Auth.AuthProtection.ConfigureRateLimiter);

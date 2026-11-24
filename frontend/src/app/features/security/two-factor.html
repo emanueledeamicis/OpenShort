@@ -13,6 +13,11 @@
         <p-message *ngIf="successMessage" severity="success" [text]="successMessage" />
         <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage" />
 
+        <!-- The status could not be loaded -->
+        <div *ngIf="!status">
+            <p-button label="Retry" icon="pi pi-refresh" [outlined]="true" (onClick)="loadStatus()" />
+        </div>
+
         <!-- Recovery codes, shown once -->
         <div *ngIf="recoveryCodes">
             <p-message severity="warn" styleClass="mb-3">

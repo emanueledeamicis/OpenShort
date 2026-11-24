@@ -34,9 +34,10 @@
                                 size="small" [disabled]="isCurrentUser(user)"
                                 [pTooltip]="isCurrentUser(user) ? 'You cannot delete your current account.' : 'Delete'"
                                 (onClick)="openDeleteConfirm(user)"></p-button>
-                            <p-button *ngIf="user.twoFactorEnabled && !isCurrentUser(user)" icon="pi pi-shield"
+                            <p-button *ngIf="user.twoFactorEnabled && !isCurrentUser(user)" icon="pi pi-lock-open"
                                 severity="secondary" [rounded]="true" [outlined]="true" size="small"
                                 pTooltip="Turn off two-factor authentication"
+                                ariaLabel="Turn off two-factor authentication"
                                 (onClick)="openTwoFactorConfirm(user)"></p-button>
                         </div>
                     </td>

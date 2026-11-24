@@ -70,9 +70,13 @@ export class UsersComponent implements OnInit, OnDestroy {
         this.subscription.unsubscribe();
     }
 
-    loadUsers() {
+    // The message of a failed action is kept when the list is loaded again because of it
+    loadUsers(keepErrorMessage = false) {
         this.loading = true;
-        this.pageErrorMessage = '';
+        if (!keepErrorMessage) {
+            this.pageErrorMessage = '';
+        }
+
         this.cdr.detectChanges();
 
         const sub = this.userService.getAll().subscribe({
@@ -220,7 +224,9 @@ export class UsersComponent implements OnInit, OnDestroy {
                 this.showTwoFactorConfirm = false;
                 this.selectedUser = null;
                 this.pageErrorMessage = this.extractApiErrorMessage(err, UsersComponent.disableTwoFactorErrorMessage);
-                this.loadUsers();
+
+                // The list may be behind: the user was deleted, or already has it off
+                this.loadUsers(true);
             }
         });
 

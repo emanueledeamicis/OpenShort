@@ -1,7 +1,7 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Observable } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
@@ -22,9 +22,11 @@ type PasswordAction = 'setup' | 'recovery-codes' | 'disable';
     imports: [CommonModule, FormsModule, ButtonModule, InputTextModule, MessageModule],
     templateUrl: './two-factor.html'
 })
-export class TwoFactorComponent implements OnInit {
+export class TwoFactorComponent implements OnInit, OnDestroy {
     private static readonly loadErrorMessage = 'Unable to load the two-factor authentication status.';
     private static readonly unexpectedErrorMessage = 'Something went wrong. Please try again.';
+    private static readonly copyErrorMessage = 'The codes could not be copied. Copy them by hand.';
+    private static readonly conflictStatus = 409;
 
     // Empty modules around the code, which a QR code needs to be read
     private static readonly qrQuietZone = 4;
@@ -48,6 +50,9 @@ export class TwoFactorComponent implements OnInit {
     recoveryCodes: string[] | null = null;
     codesCopied = false;
 
+    private subscription = new Subscription();
+    private copiedTimeout: ReturnType<typeof setTimeout> | null = null;
+
     constructor(
         private securityService: SecurityService,
         private cdr: ChangeDetectorRef
@@ -55,6 +60,13 @@ export class TwoFactorComponent implements OnInit {
 
     ngOnInit() {
         this.loadStatus();
+    }
+
+    ngOnDestroy() {
+        this.subscription.unsubscribe();
+        if (this.copiedTimeout) {
+            clearTimeout(this.copiedTimeout);
+        }
     }
 
     get formattedKey(): string {
@@ -85,20 +97,28 @@ export class TwoFactorComponent implements OnInit {
         }
     }
 
-    loadStatus() {
+    // The message of a failed action is kept when the status is loaded again because of it
+    loadStatus(keepErrorMessage = false) {
         this.isLoading = true;
-        this.securityService.getTwoFactorStatus().subscribe({
+        if (!keepErrorMessage) {
+            this.errorMessage = null;
+        }
+
+        this.cdr.detectChanges();
+
+        this.subscription.add(this.securityService.getTwoFactorStatus().subscribe({
             next: (status) => {
                 this.status = status;
                 this.isLoading = false;
                 this.cdr.detectChanges();
             },
             error: () => {
+                this.status = null;
                 this.errorMessage = TwoFactorComponent.loadErrorMessage;
                 this.isLoading = false;
                 this.cdr.detectChanges();
             }
-        });
+        }));
     }
 
     askPassword(action: PasswordAction) {
@@ -109,10 +129,7 @@ export class TwoFactorComponent implements OnInit {
     }
 
     cancel() {
-        this.passwordAction = null;
-        this.password = '';
-        this.setup = null;
-        this.code = '';
+        this.closeForms();
         this.errorMessage = null;
     }
 
@@ -145,27 +162,43 @@ export class TwoFactorComponent implements OnInit {
         }
 
         this.run(this.securityService.enableTwoFactor(this.code.trim()), (result) => {
-            this.setup = null;
-            this.code = '';
+            this.closeForms();
             this.successMessage = 'Two-factor authentication is on.';
             this.showRecoveryCodes(result);
         });
     }
 
+    // The clipboard is missing on a page served over plain HTTP, and the browser can refuse the copy
     copyRecoveryCodes() {
-        if (this.recoveryCodes) {
-            navigator.clipboard.writeText(this.recoveryCodes.join('\n'));
-            this.codesCopied = true;
-            setTimeout(() => {
-                this.codesCopied = false;
-                this.cdr.detectChanges();
-            }, 2000);
+        if (!this.recoveryCodes) {
+            return;
         }
+
+        const copy = navigator.clipboard
+            ? navigator.clipboard.writeText(this.recoveryCodes.join('\n'))
+            : Promise.reject();
+
+        copy.then(
+            () => {
+                this.codesCopied = true;
+                this.errorMessage = null;
+                this.cdr.detectChanges();
+                this.copiedTimeout = setTimeout(() => {
+                    this.codesCopied = false;
+                    this.cdr.detectChanges();
+                }, 2000);
+            },
+            () => {
+                this.errorMessage = TwoFactorComponent.copyErrorMessage;
+                this.cdr.detectChanges();
+            }
+        );
     }
 
     dismissRecoveryCodes() {
         this.recoveryCodes = null;
         this.successMessage = null;
+        this.errorMessage = null;
     }
 
     private showSetup(setup: TwoFactorSetup) {
@@ -177,6 +210,16 @@ export class TwoFactorComponent implements OnInit {
     private showRecoveryCodes(result: TwoFactorRecoveryCodes) {
         this.recoveryCodes = result.recoveryCodes;
         this.status = { isEnabled: true, recoveryCodesLeft: result.recoveryCodes.length };
+    }
+
+    // Also forgets the secret: the QR code is enough to read it back
+    private closeForms() {
+        this.passwordAction = null;
+        this.password = '';
+        this.setup = null;
+        this.qrPath = '';
+        this.qrViewBox = '';
+        this.code = '';
     }
 
     // The code is drawn as one SVG path, a square for each dark module
@@ -206,7 +249,7 @@ export class TwoFactorComponent implements OnInit {
         this.errorMessage = null;
         this.successMessage = null;
 
-        call.subscribe({
+        this.subscription.add(call.subscribe({
             next: (result) => {
                 this.isBusy = false;
                 this.passwordAction = null;
@@ -216,9 +259,35 @@ export class TwoFactorComponent implements OnInit {
             },
             error: (err) => {
                 this.isBusy = false;
-                this.errorMessage = err?.error?.message || err?.error?.detail || TwoFactorComponent.unexpectedErrorMessage;
+                this.errorMessage = this.extractApiErrorMessage(err);
+
+                // The page is behind: two-factor authentication was turned on or off somewhere else,
+                // or an earlier answer was lost. The form no longer applies
+                if (err?.status === TwoFactorComponent.conflictStatus) {
+                    this.closeForms();
+                    this.loadStatus(true);
+                    return;
+                }
+
                 this.cdr.detectChanges();
             }
-        });
+        }));
+    }
+
+    private extractApiErrorMessage(err: any): string {
+        const apiError = err?.error;
+        const validationErrors = apiError?.errors;
+
+        if (validationErrors && typeof validationErrors === 'object') {
+            const messages = Object.values(validationErrors)
+                .flatMap((value) => Array.isArray(value) ? value : [value])
+                .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+
+            if (messages.length > 0) {
+                return messages.join(' ');
+            }
+        }
+
+        return apiError?.message || apiError?.detail || TwoFactorComponent.unexpectedErrorMessage;
     }
 }

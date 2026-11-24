@@ -397,7 +397,7 @@ If that user is `admin` and nobody else can do it, use the optional `ADMIN_2FA_R
 3. Sign in with username `admin` and the usual password, which is not changed.
 4. Remove the environment variable. As long as it is set, two-factor authentication of `admin` is turned off again at every start.
 
-The variable acts on the `admin` account only.
+The variable acts on the `admin` account only. If `admin` was deleted and no administrator can sign in, create it again with `ADMIN_PASSWORD_RESET` (see "Admin Password Recovery"), then turn off two-factor authentication for the other users from there.
 
 ### JWT Secret Key
 

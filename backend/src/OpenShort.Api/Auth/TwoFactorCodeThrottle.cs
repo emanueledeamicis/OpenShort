@@ -28,4 +28,13 @@ public class TwoFactorCodeThrottle : LoginThrottle
     {
         return AttemptAsync(userId, AnyClientAddress, verifyCode, cancellationToken);
     }
+
+    /// <summary>
+    /// Forgets the wrong codes of an account. For when two-factor authentication is turned off:
+    /// the count must not come back if it is turned on again.
+    /// </summary>
+    public void Reset(string userId)
+    {
+        Reset(userId, AnyClientAddress);
+    }
 }

@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenShort.Api.Auth;
 using OpenShort.Core.Interfaces;
 using OpenShort.Infrastructure.Services;
 
@@ -25,11 +26,13 @@ public class UsersController : ControllerBase
     private const string UnexpectedUserDeleteErrorMessage = "An unexpected error occurred while deleting the user.";
 
     private readonly IUserService _userService;
+    private readonly TwoFactorCodeThrottle _twoFactorCodeThrottle;
     private readonly ILogger<UsersController> _logger;
 
-    public UsersController(IUserService userService, ILogger<UsersController> logger)
+    public UsersController(IUserService userService, TwoFactorCodeThrottle twoFactorCodeThrottle, ILogger<UsersController> logger)
     {
         _userService = userService;
+        _twoFactorCodeThrottle = twoFactorCodeThrottle;
         _logger = logger;
     }
 
@@ -86,8 +89,7 @@ public class UsersController : ControllerBase
     {
         try
         {
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.Equals(currentUserId, id, StringComparison.Ordinal))
+            if (await IsCurrentUserAsync(id))
             {
                 return Problem(statusCode: StatusCodes.Status400BadRequest, detail: CurrentUserDeletionForbiddenMessage);
             }
@@ -133,8 +135,7 @@ public class UsersController : ControllerBase
         try
         {
             // One's own is turned off from the two-factor endpoints, which ask for the password
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.Equals(currentUserId, id, StringComparison.Ordinal))
+            if (await IsCurrentUserAsync(id))
             {
                 return Problem(statusCode: StatusCodes.Status400BadRequest, detail: OwnTwoFactorMessage);
             }
@@ -143,7 +144,23 @@ public class UsersController : ControllerBase
 
             if (success)
             {
-                _logger.LogWarning("Two-factor authentication turned off for user {UserId} by administrator {AdministratorId}", id, currentUserId);
+                // The id is the one of the account that was found, which the database may match whatever its case
+                var user = await _userService.GetByIdAsync(id);
+                _twoFactorCodeThrottle.Reset(user?.Id ?? id);
+
+                _logger.LogWarning(
+                    "Two-factor authentication turned off for user {UserId} by administrator {AdministratorId}",
+                    id,
+                    User.FindFirstValue(ClaimTypes.NameIdentifier));
+                if (errors.Any())
+                {
+                    // What is left is replaced when the user sets two-factor authentication up again
+                    _logger.LogWarning(
+                        "The secret or the recovery codes of user {UserId} were not removed: {Errors}",
+                        id,
+                        string.Join(", ", errors.Select(error => error.Description)));
+                }
+
                 return NoContent();
             }
 
@@ -168,6 +185,20 @@ public class UsersController : ControllerBase
             _logger.LogError(ex, "Error turning off two-factor authentication for user {UserId}", id);
             return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedTwoFactorDisableErrorMessage);
         }
+    }
+
+    // The database may find an account from an id written in another case, or with spaces after it:
+    // what tells whether it is the signed-in user is the account that is found, not the text of the id
+    private async Task<bool> IsCurrentUserAsync(string id)
+    {
+        var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.Equals(currentUserId, id, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var user = await _userService.GetByIdAsync(id);
+        return user != null && string.Equals(user.Id, currentUserId, StringComparison.Ordinal);
     }
 }
 

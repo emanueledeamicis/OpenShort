@@ -19,14 +19,28 @@ public static class TwoFactorAccounts
     /// These are separate saves, in this order: if a later one fails, two-factor authentication is off
     /// and what is left is replaced by the next setup.
     /// </summary>
-    public static async Task<IdentityResult> DisableAsync(UserManager<AppUser> userManager, AppUser user)
+    public static async Task<TwoFactorDisableResult> DisableAsync(UserManager<AppUser> userManager, AppUser user)
     {
         var disableResult = await userManager.SetTwoFactorEnabledAsync(user, false);
         if (!disableResult.Succeeded)
         {
-            return disableResult;
+            return new TwoFactorDisableResult(false, disableResult.Errors);
         }
 
+        return new TwoFactorDisableResult(true, (await RemoveSecretAndRecoveryCodesAsync(userManager, user)).Errors);
+    }
+
+    /// <summary>
+    /// Tells whether a secret or recovery codes are stored for the account.
+    /// </summary>
+    public static async Task<bool> HasSecretOrRecoveryCodesAsync(UserManager<AppUser> userManager, AppUser user)
+    {
+        return await userManager.GetAuthenticatorKeyAsync(user) != null
+            || await userManager.CountRecoveryCodesAsync(user) > 0;
+    }
+
+    public static async Task<IdentityResult> RemoveSecretAndRecoveryCodesAsync(UserManager<AppUser> userManager, AppUser user)
+    {
         var removeKeyResult = await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, AuthenticatorKeyTokenName);
         if (!removeKeyResult.Succeeded)
         {
@@ -35,4 +49,13 @@ public static class TwoFactorAccounts
 
         return await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, RecoveryCodesTokenName);
     }
+}
+
+/// <summary>
+/// Outcome of turning two-factor authentication off. It can be off and still have errors:
+/// the ones met while removing the secret and the recovery codes afterwards.
+/// </summary>
+public readonly record struct TwoFactorDisableResult(bool IsDisabled, IEnumerable<IdentityError> Errors)
+{
+    public bool IsComplete => IsDisabled && !Errors.Any();
 }

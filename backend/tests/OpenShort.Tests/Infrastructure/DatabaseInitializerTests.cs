@@ -576,6 +576,64 @@ public class DatabaseInitializerTests
         error.Message.Should().Contain(RejectingUserValidator.ErrorDescription);
     }
 
+    [Test]
+    public async Task Initialize_ShouldSayThatTwoFactorIsOff_WhenRemovingTheSecretFails_AndRemoveItAtTheNextStart()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await EnableTwoFactorAsync(DatabaseInitializer.AdminUserName);
+        _loggerProvider.Entries.Clear();
+
+        // Act: the save that turns it off goes through, the next one does not
+        await StartAsync(resetPassword: null, twoFactorReset: "true", userSavesBeforeFailure: 1);
+        var stateAfterTheFailure = await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName);
+        var entriesAfterTheFailure = _loggerProvider.Entries.ToList();
+        _loggerProvider.Entries.Clear();
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        stateAfterTheFailure.Should().Be((false, true, RecoveryCodeCount));
+        entriesAfterTheFailure.Should().ContainSingle(entry => entry.Level == LogLevel.Warning)
+            .Which.Message.Should().Contain("was turned off");
+        var error = entriesAfterTheFailure.Should().ContainSingle(entry => entry.Level == LogLevel.Error).Which;
+        error.Message.Should().Contain("not removed");
+        error.Message.Should().Contain(RejectingUserValidator.ErrorDescription);
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+        _loggerProvider.Entries.Should().ContainSingle(entry => entry.Message.Contains("were removed"));
+    }
+
+    [Test]
+    public async Task Initialize_ShouldRecreateAdminWithPasswordAndWithoutTwoFactor_WhenAdminWasDeletedAndBothRecoveriesAreSet()
+    {
+        // Arrange
+        await StartWithAdminPasswordAsync(CurrentPassword);
+        await CreateOtherAdminAndDeleteDefaultAdminAsync();
+        await EnableTwoFactorAsync(OtherAdminEmail);
+        _loggerProvider.Entries.Clear();
+
+        // Act
+        await StartAsync(NewPassword, twoFactorReset: "true");
+
+        // Assert
+        (await CheckAdminPasswordAsync(NewPassword)).Should().BeTrue();
+        (await GetTwoFactorStateAsync(DatabaseInitializer.AdminUserName)).Should().Be((false, false, 0));
+        (await GetTwoFactorStateAsync(OtherAdminEmail)).Should().Be((true, true, RecoveryCodeCount));
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+    }
+
+    [Test]
+    public async Task Initialize_ShouldKeepSetupRequired_WhenAdminHasNoPasswordAndTheTwoFactorResetIsSet()
+    {
+        // Act: a new installation started with the variable already in place
+        await StartAsync(resetPassword: null, twoFactorReset: "true");
+
+        // Assert
+        (await IsSetupRequiredAsync()).Should().BeTrue();
+        (await AdminHasPasswordAsync()).Should().BeFalse();
+        _loggerProvider.Entries.Should().NotContain(entry => entry.Level >= LogLevel.Warning);
+    }
+
     private const int RecoveryCodeCount = 10;
 
     // Same steps as the two-factor endpoints: a secret, the recovery codes, then the flag
@@ -658,9 +716,13 @@ public class DatabaseInitializerTests
             .SetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, "false");
     }
 
-    private async Task StartAsync(string? resetPassword, bool failUserSave = false, string? twoFactorReset = null)
+    private async Task StartAsync(
+        string? resetPassword,
+        bool failUserSave = false,
+        string? twoFactorReset = null,
+        int userSavesBeforeFailure = 0)
     {
-        await using var provider = BuildProvider(resetPassword, failUserSave, twoFactorReset);
+        await using var provider = BuildProvider(resetPassword, failUserSave || userSavesBeforeFailure > 0, twoFactorReset, userSavesBeforeFailure);
         using var scope = provider.CreateScope();
         await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
     }
@@ -692,7 +754,11 @@ public class DatabaseInitializerTests
     }
 
     // Same registrations as Program.cs for the services the initializer uses
-    private ServiceProvider BuildProvider(string? resetPassword, bool failUserSave = false, string? twoFactorReset = null)
+    private ServiceProvider BuildProvider(
+        string? resetPassword,
+        bool failUserSave = false,
+        string? twoFactorReset = null,
+        int userSavesBeforeFailure = 0)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -711,7 +777,7 @@ public class DatabaseInitializerTests
             .AddEntityFrameworkStores<AppDbContext>();
         if (failUserSave)
         {
-            services.AddScoped<IUserValidator<AppUser>, RejectingUserValidator>();
+            services.AddScoped<IUserValidator<AppUser>>(_ => new RejectingUserValidator(userSavesBeforeFailure));
         }
 
         services.AddScoped<ISettingService, SettingService>();
@@ -721,12 +787,17 @@ public class DatabaseInitializerTests
     }
 
     // Identity runs the user validators before every save of a user: rejecting here makes the save fail
-    private sealed class RejectingUserValidator : IUserValidator<AppUser>
+    // The first saves can be let through, to make a later one fail
+    private sealed class RejectingUserValidator(int savesBeforeFailure) : IUserValidator<AppUser>
     {
         public const string ErrorDescription = "Save rejected by the test.";
 
+        private int _saves;
+
         public Task<IdentityResult> ValidateAsync(UserManager<AppUser> manager, AppUser user) =>
-            Task.FromResult(IdentityResult.Failed(new IdentityError { Code = "TestFailure", Description = ErrorDescription }));
+            Task.FromResult(++_saves <= savesBeforeFailure
+                ? IdentityResult.Success
+                : IdentityResult.Failed(new IdentityError { Code = "TestFailure", Description = ErrorDescription }));
     }
 
     private sealed record LogEntry(LogLevel Level, string Message);

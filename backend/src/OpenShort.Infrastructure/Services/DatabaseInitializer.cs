@@ -34,7 +34,9 @@ public class DatabaseInitializer
     private const string AdminTwoFactorResetInvalidValueMessage = "{Variable} was not applied because its value is not valid, the admin account is unchanged. Set it to true to turn off two-factor authentication for the admin account.";
     private const string AdminTwoFactorResetNoAdminMessage = "{Variable} was not applied because there is no admin account.";
     private const string AdminTwoFactorResetNotEnabledMessage = "{Variable} is set, but two-factor authentication is not on for the admin account: nothing was changed. Remove the variable.";
-    private const string AdminTwoFactorResetFailedMessage = "Failed to turn off two-factor authentication for the admin account: {Errors}";
+    private const string AdminTwoFactorResetLeftoverRemovedMessage = "{Variable} is set and two-factor authentication is not on for the admin account: the secret and the recovery codes that were still stored were removed. Remove the variable.";
+    private const string AdminTwoFactorResetFailedMessage = "Failed to turn off two-factor authentication for the admin account, it is still on: {Errors}";
+    private const string AdminTwoFactorResetCleanupFailedMessage = "The secret or the recovery codes of the admin account were not removed: {Errors}. They are removed at the next start, as long as {Variable} is set.";
     private const string AdminTwoFactorResetCompletedMessage = "Two-factor authentication was turned off for the admin account because {Variable} is set. Remove the variable: as long as it is set, this happens at every start.";
     private const string AdminUserNotRecreatedMessage = "The default admin user was deleted and is not created again: another administrator can sign in.";
 
@@ -221,18 +223,44 @@ public class DatabaseInitializer
 
         if (!await _userManager.GetTwoFactorEnabledAsync(adminUser))
         {
-            _logger.LogInformation(AdminTwoFactorResetNotEnabledMessage, AdminTwoFactorResetEnvironmentVariable);
+            // What an earlier attempt, here or from the dashboard, could not remove
+            if (!await TwoFactorAccounts.HasSecretOrRecoveryCodesAsync(_userManager, adminUser))
+            {
+                _logger.LogInformation(AdminTwoFactorResetNotEnabledMessage, AdminTwoFactorResetEnvironmentVariable);
+                return;
+            }
+
+            var cleanupResult = await TwoFactorAccounts.RemoveSecretAndRecoveryCodesAsync(_userManager, adminUser);
+            if (!cleanupResult.Succeeded)
+            {
+                LogAdminTwoFactorCleanupFailure(cleanupResult.Errors);
+                return;
+            }
+
+            _logger.LogInformation(AdminTwoFactorResetLeftoverRemovedMessage, AdminTwoFactorResetEnvironmentVariable);
             return;
         }
 
         var result = await TwoFactorAccounts.DisableAsync(_userManager, adminUser);
-        if (!result.Succeeded)
+        if (!result.IsDisabled)
         {
             _logger.LogError(AdminTwoFactorResetFailedMessage, string.Join(", ", result.Errors.Select(error => error.Description)));
             return;
         }
 
         _logger.LogWarning(AdminTwoFactorResetCompletedMessage, AdminTwoFactorResetEnvironmentVariable);
+        if (!result.IsComplete)
+        {
+            LogAdminTwoFactorCleanupFailure(result.Errors);
+        }
+    }
+
+    private void LogAdminTwoFactorCleanupFailure(IEnumerable<IdentityError> errors)
+    {
+        _logger.LogError(
+            AdminTwoFactorResetCleanupFailedMessage,
+            string.Join(", ", errors.Select(error => error.Description)),
+            AdminTwoFactorResetEnvironmentVariable);
     }
 
     private async Task<bool> IsResetPasswordValidAsync(AppUser adminUser, string resetPassword)

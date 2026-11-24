@@ -123,8 +123,9 @@ public class UserService : IUserService
             });
         }
 
+        // Off with errors means that the secret or the recovery codes were not removed afterwards
         var result = await TwoFactorAccounts.DisableAsync(_userManager, user);
 
-        return (result.Succeeded, result.Errors);
+        return (result.IsDisabled, result.Errors);
     }
 }

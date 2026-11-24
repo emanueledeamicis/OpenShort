@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Microsoft.Extensions.Logging.Abstractions;
+using OpenShort.Api.Auth;
 using OpenShort.Api.Controllers;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
@@ -19,6 +21,7 @@ public class UsersControllerTests
 {
     private Mock<IUserService> _userServiceMock = null!;
     private Mock<ILogger<UsersController>> _loggerMock = null!;
+    private TwoFactorCodeThrottle _twoFactorCodeThrottle = null!;
     private UsersController _controller = null!;
 
     [SetUp]
@@ -26,7 +29,8 @@ public class UsersControllerTests
     {
         _userServiceMock = new Mock<IUserService>();
         _loggerMock = new Mock<ILogger<UsersController>>();
-        _controller = new UsersController(_userServiceMock.Object, _loggerMock.Object);
+        _twoFactorCodeThrottle = new TwoFactorCodeThrottle(TimeProvider.System, NullLogger<LoginThrottle>.Instance);
+        _controller = new UsersController(_userServiceMock.Object, _twoFactorCodeThrottle, _loggerMock.Object);
     }
 
     [Test]
@@ -112,6 +116,81 @@ public class UsersControllerTests
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         _userServiceMock.Verify(service => service.DisableTwoFactorAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    // MySQL finds an account from an id written in another case
+    [Test]
+    public async Task DisableTwoFactor_ShouldRejectTheCurrentUser_WhenTheIdIsWrittenInAnotherCase()
+    {
+        // Arrange
+        SignInAs("user-123");
+        _userServiceMock
+            .Setup(service => service.GetByIdAsync("USER-123"))
+            .ReturnsAsync(new AppUser { Id = "user-123", UserName = "admin" });
+
+        // Act
+        var result = await _controller.DisableTwoFactor("USER-123");
+
+        // Assert
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _userServiceMock.Verify(service => service.DisableTwoFactorAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DeleteUser_ShouldRejectDeletingCurrentUser_WhenTheIdIsWrittenInAnotherCase()
+    {
+        // Arrange
+        SignInAs("user-123");
+        _userServiceMock
+            .Setup(service => service.GetByIdAsync("USER-123"))
+            .ReturnsAsync(new AppUser { Id = "user-123", UserName = "admin" });
+
+        // Act
+        var result = await _controller.DeleteUser("USER-123");
+
+        // Assert
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _userServiceMock.Verify(service => service.DeleteAdminAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldForgetTheWrongCodesOfTheLogin()
+    {
+        // Arrange: enough wrong codes at login to have a delay pending
+        SignInAs("user-123");
+        for (var failures = 0; failures < 10; failures++)
+        {
+            await _twoFactorCodeThrottle.AttemptAsync("user-456", () => Task.FromResult(false));
+        }
+
+        _userServiceMock
+            .Setup(service => service.DisableTwoFactorAsync("user-456"))
+            .ReturnsAsync((true, Enumerable.Empty<IdentityError>()));
+
+        // Act
+        await _controller.DisableTwoFactor("user-456");
+
+        // Assert: after turning it on again, the first code is checked
+        var attempt = await _twoFactorCodeThrottle.AttemptAsync("user-456", () => Task.FromResult(true));
+        attempt.Succeeded.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldReturnNoContent_WhenItIsOffButTheSecretWasNotRemoved()
+    {
+        // Arrange
+        SignInAs("user-123");
+        _userServiceMock
+            .Setup(service => service.DisableTwoFactorAsync("user-456"))
+            .ReturnsAsync((true, new[] { new IdentityError { Code = "ConcurrencyFailure", Description = "Not removed." } }));
+
+        // Act
+        var result = await _controller.DisableTwoFactor("user-456");
+
+        // Assert
+        result.Should().BeOfType<NoContentResult>();
     }
 
     [TestCase("NotFound", StatusCodes.Status404NotFound)]

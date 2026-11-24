@@ -716,7 +716,7 @@ public class AuthControllerLoginTests
         // Arrange
         await EnableTwoFactorAsync();
         var user = await _userManager.FindByNameAsync(UserName);
-        (await TwoFactorAccounts.DisableAsync(_userManager, user!)).Succeeded.Should().BeTrue();
+        (await TwoFactorAccounts.DisableAsync(_userManager, user!)).IsComplete.Should().BeTrue();
 
         // Act
         var result = await LoginAsync(Password);

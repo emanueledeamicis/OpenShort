@@ -1,0 +1,106 @@
+<div class="card bg-surface-0 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl p-6 mb-6">
+    <h2 class="text-xl font-semibold text-surface-900 dark:text-surface-0 mb-2">Two-Factor Authentication</h2>
+    <p class="text-surface-600 dark:text-surface-400 mb-4">
+        Ask for a code from an authenticator app, in addition to your password, when you sign in.
+        API keys are not affected.
+    </p>
+
+    <div *ngIf="isLoading" class="text-surface-500">
+        <i class="pi pi-spin pi-spinner mr-2"></i> Loading...
+    </div>
+
+    <div *ngIf="!isLoading" class="flex flex-col gap-4 max-w-md">
+        <p-message *ngIf="successMessage" severity="success" [text]="successMessage" />
+        <p-message *ngIf="errorMessage" severity="error" [text]="errorMessage" />
+
+        <!-- The status could not be loaded -->
+        <div *ngIf="!status">
+            <p-button label="Retry" icon="pi pi-refresh" [outlined]="true" (onClick)="loadStatus()" />
+        </div>
+
+        <!-- Recovery codes, shown once -->
+        <div *ngIf="recoveryCodes">
+            <p-message severity="warn" styleClass="mb-3">
+                <span><span class="font-bold">Save these recovery codes now!</span> They will not be visible again.
+                    Each one works once, in place of the code from the app.</span>
+            </p-message>
+            <div
+                class="grid grid-cols-2 gap-2 bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg p-3">
+                <code *ngFor="let recoveryCode of recoveryCodes"
+                    class="font-mono text-surface-900 dark:text-surface-0">{{ recoveryCode }}</code>
+            </div>
+            <div class="flex gap-2 mt-3">
+                <p-button [label]="codesCopied ? 'Copied!' : 'Copy'" [icon]="codesCopied ? 'pi pi-check' : 'pi pi-copy'"
+                    severity="success" [outlined]="true" (onClick)="copyRecoveryCodes()" />
+                <p-button label="I have saved the codes" severity="secondary" [text]="true"
+                    (onClick)="dismissRecoveryCodes()" />
+            </div>
+        </div>
+
+        <!-- Status and actions -->
+        <ng-container *ngIf="status && !recoveryCodes && !passwordAction && !setup">
+            <div *ngIf="!status.isEnabled">
+                <p-message severity="secondary" text="Two-factor authentication is off." styleClass="mb-4" />
+                <p-button label="Set up two-factor authentication" icon="pi pi-shield"
+                    (onClick)="askPassword('setup')" />
+            </div>
+
+            <div *ngIf="status.isEnabled">
+                <p-message severity="success" text="Two-factor authentication is on." styleClass="mb-3" />
+                <p class="text-surface-700 dark:text-surface-300 mb-4">
+                    Recovery codes left: <span class="font-medium">{{ status.recoveryCodesLeft }}</span>
+                </p>
+                <div class="flex flex-wrap gap-2">
+                    <p-button label="New recovery codes" icon="pi pi-refresh" [outlined]="true"
+                        (onClick)="askPassword('recovery-codes')" />
+                    <p-button label="Turn off" icon="pi pi-times" severity="danger" [outlined]="true"
+                        (onClick)="askPassword('disable')" />
+                </div>
+            </div>
+        </ng-container>
+
+        <!-- Password confirmation -->
+        <form *ngIf="passwordAction" (ngSubmit)="submitPassword()" class="flex flex-col gap-3">
+            <label for="twoFactorPassword" class="font-medium text-surface-700 dark:text-surface-300">
+                {{ passwordPrompt }}
+            </label>
+            <input pInputText id="twoFactorPassword" type="password" name="twoFactorPassword" [(ngModel)]="password"
+                autocomplete="current-password" placeholder="Enter current password" class="w-full"
+                [disabled]="isBusy" />
+            <div class="flex gap-2">
+                <p-button type="submit" [label]="passwordActionLabel"
+                    [severity]="passwordAction === 'disable' ? 'danger' : 'primary'" [disabled]="!password"
+                    [loading]="isBusy" />
+                <p-button label="Cancel" severity="secondary" [text]="true" [disabled]="isBusy" (onClick)="cancel()" />
+            </div>
+        </form>
+
+        <!-- Setup: QR code, then the first code -->
+        <form *ngIf="setup" (ngSubmit)="confirmCode()" class="flex flex-col gap-3">
+            <p class="text-surface-700 dark:text-surface-300">
+                1. Scan this QR code with your authenticator app.
+            </p>
+            <svg [attr.viewBox]="qrViewBox" class="w-48 h-48 rounded-lg" role="img" shape-rendering="crispEdges"
+                aria-label="QR code for the authenticator app">
+                <rect x="-100%" y="-100%" width="300%" height="300%" fill="#ffffff" />
+                <path [attr.d]="qrPath" fill="#000000" />
+            </svg>
+            <p class="text-sm text-surface-600 dark:text-surface-400">
+                If you cannot scan it, enter this key in the app:
+                <code
+                    class="block mt-1 bg-surface-100 dark:bg-surface-800 px-2 py-1 rounded font-mono break-all">{{ formattedKey }}</code>
+            </p>
+            <label for="twoFactorCode" class="text-surface-700 dark:text-surface-300">
+                2. Enter the 6-digit code shown by the app.
+            </label>
+            <input pInputText id="twoFactorCode" type="text" name="twoFactorCode" [(ngModel)]="code"
+                inputmode="numeric" autocomplete="one-time-code" maxlength="16" placeholder="123 456" class="w-full"
+                [disabled]="isBusy" />
+            <div class="flex gap-2">
+                <p-button type="submit" label="Turn on" icon="pi pi-check" [disabled]="!code.trim()"
+                    [loading]="isBusy" />
+                <p-button label="Cancel" severity="secondary" [text]="true" [disabled]="isBusy" (onClick)="cancel()" />
+            </div>
+        </form>
+    </div>
+</div>

@@ -84,10 +84,17 @@ export class LoginComponent implements OnInit {
             this.backToPassword();
           }
 
-          this.errorMessage = this.extractApiErrorMessage(err, 'Login failed. Please check your credentials.');
+          this.errorMessage = err?.status === 0
+            ? 'Unable to reach the OpenShort API. Please try again.'
+            : this.extractApiErrorMessage(err, 'Login failed. Please check your credentials.');
         }
 
         this.cdr.detectChanges();
+
+        // The fields were disabled during the request, which takes the focus away
+        if (this.isCodeRequired) {
+          this.focus('code');
+        }
       }
     });
   }
@@ -97,6 +104,7 @@ export class LoginComponent implements OnInit {
     this.code = '';
     this.password = '';
     this.errorMessage = '';
+    this.focus('password');
   }
 
   private askForCode(err: any) {
@@ -107,9 +115,11 @@ export class LoginComponent implements OnInit {
 
     this.isCodeRequired = true;
     this.code = '';
+  }
 
-    // The field exists only after the view is updated
-    setTimeout(() => document.getElementById('code')?.focus());
+  // The field may exist, or be enabled again, only after the view is updated
+  private focus(fieldId: string) {
+    setTimeout(() => document.getElementById(fieldId)?.focus());
   }
 
   onSetupAdmin() {

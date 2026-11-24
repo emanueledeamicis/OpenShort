@@ -60,11 +60,16 @@
 
         <!-- Second step, for an account with two-factor authentication -->
         <ng-template #codeForm>
+          <p class="text-sm text-surface-600 dark:text-surface-400">
+            Signing in as <strong class="break-all">{{ identifier }}</strong>
+          </p>
+
           <div class="flex flex-col gap-2">
             <label for="code" class="text-surface-900 dark:text-surface-0 font-medium">Authentication code</label>
             <input pInputText id="code" type="text" [(ngModel)]="code" class="w-full" placeholder="123 456"
-              autocomplete="one-time-code" maxlength="32" [disabled]="loading" (keyup.enter)="onLogin()" />
-            <small class="text-surface-600 dark:text-surface-400">
+              autocomplete="one-time-code" maxlength="32" aria-describedby="codeHelp" [disabled]="loading"
+              (keyup.enter)="onLogin()" />
+            <small id="codeHelp" class="text-surface-600 dark:text-surface-400">
               Enter the 6-digit code from your authenticator app, or one of your recovery codes.
             </small>
           </div>

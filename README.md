@@ -385,6 +385,7 @@ The reset does not sign out sessions that are already open: a token issued befor
 Each user can protect their own account with the codes of an authenticator app (TOTP). It is optional and off by default: it is turned on and off from the **Security** page of the dashboard.
 
 - When it is turned on, 10 recovery codes are shown once: each of them works one time in place of the code of the app.
+- At sign-in, after the password, the dashboard asks for the code of the app; a recovery code can be typed in the same field. A code of the app works once, and repeated wrong codes are delayed, up to 15 minutes; recovery codes keep working in the meantime.
 - API keys are not affected: a request with an API key never needs a code.
 - Turning it on does not sign out sessions that are already open: a token issued before stays valid until it expires, up to 7 days.
 

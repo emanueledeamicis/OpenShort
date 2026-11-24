@@ -63,6 +63,90 @@ public class UsersControllerTests
     }
 
     [Test]
+    public async Task GetUsers_ShouldTellWhoHasTwoFactorOn()
+    {
+        // Arrange
+        _userServiceMock
+            .Setup(service => service.GetAllAdminsAsync())
+            .ReturnsAsync(
+            [
+                new AppUser { Id = "user-1", UserName = "admin", TwoFactorEnabled = true },
+                new AppUser { Id = "user-2", UserName = "second@example.com" }
+            ]);
+
+        // Act
+        var result = await _controller.GetUsers();
+
+        // Assert
+        var users = result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<IEnumerable<AdminUserDto>>().Subject.ToList();
+        users.Single(user => user.Id == "user-1").TwoFactorEnabled.Should().BeTrue();
+        users.Single(user => user.Id == "user-2").TwoFactorEnabled.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldReturnNoContent_ForAnotherUser()
+    {
+        // Arrange
+        SignInAs("user-123");
+        _userServiceMock
+            .Setup(service => service.DisableTwoFactorAsync("user-456"))
+            .ReturnsAsync((true, Enumerable.Empty<IdentityError>()));
+
+        // Act
+        var result = await _controller.DisableTwoFactor("user-456");
+
+        // Assert
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    [Test]
+    public async Task DisableTwoFactor_ShouldRejectTheCurrentUser()
+    {
+        // Arrange
+        SignInAs("user-123");
+
+        // Act
+        var result = await _controller.DisableTwoFactor("user-123");
+
+        // Assert
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _userServiceMock.Verify(service => service.DisableTwoFactorAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [TestCase("NotFound", StatusCodes.Status404NotFound)]
+    [TestCase("TwoFactorNotEnabled", StatusCodes.Status409Conflict)]
+    [TestCase("ConcurrencyFailure", StatusCodes.Status500InternalServerError)]
+    public async Task DisableTwoFactor_ShouldReturnTheStatusOfTheError(string errorCode, int expectedStatusCode)
+    {
+        // Arrange
+        SignInAs("user-123");
+        _userServiceMock
+            .Setup(service => service.DisableTwoFactorAsync("user-456"))
+            .ReturnsAsync((false, new[] { new IdentityError { Code = errorCode, Description = "Not done." } }));
+
+        // Act
+        var result = await _controller.DisableTwoFactor("user-456");
+
+        // Assert
+        result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(expectedStatusCode);
+    }
+
+    private void SignInAs(string userId)
+    {
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, userId)],
+                    authenticationType: "TestAuth"))
+            }
+        };
+    }
+
+    [Test]
     public async Task CreateUser_ShouldUseRequestBodyValues()
     {
         var createdUser = new AppUser

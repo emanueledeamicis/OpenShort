@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using OpenShort.Api.Auth;
 using OpenShort.Api.Models;
 using OpenShort.Core.Entities;
+using OpenShort.Infrastructure.Services;
 
 namespace OpenShort.Api.Controllers;
 
@@ -206,7 +207,7 @@ public class TwoFactorController : ControllerBase
             return BadRequest(new { message = IncorrectPasswordMessage });
         }
 
-        var disableResult = await TwoFactorCodes.DisableAsync(_userManager, user);
+        var disableResult = await TwoFactorAccounts.DisableAsync(_userManager, user);
         if (!disableResult.Succeeded)
         {
             return UnexpectedError(user, disableResult.Errors);

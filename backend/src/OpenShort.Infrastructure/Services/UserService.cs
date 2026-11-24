@@ -10,6 +10,8 @@ public class UserService : IUserService
     private const string UserNotFoundErrorDescription = "User not found.";
     private const string LastAdminDeletionForbiddenErrorCode = "LastAdminDeletionForbidden";
     private const string LastAdminDeletionForbiddenErrorDescription = "You cannot delete the last admin user who can sign in.";
+    public const string TwoFactorNotEnabledErrorCode = "TwoFactorNotEnabled";
+    private const string TwoFactorNotEnabledErrorDescription = "Two-factor authentication is not enabled for this user.";
 
     private readonly UserManager<AppUser> _userManager;
 
@@ -91,6 +93,38 @@ public class UserService : IUserService
 
         var result = await _userManager.DeleteAsync(user);
         
+        return (result.Succeeded, result.Errors);
+    }
+
+    public async Task<(bool Success, IEnumerable<IdentityError> Errors)> DisableTwoFactorAsync(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id);
+        if (user == null || !await _userManager.IsInRoleAsync(user, DatabaseInitializer.AdminRoleName))
+        {
+            return (false, new []
+            {
+                new IdentityError
+                {
+                    Code = UserNotFoundErrorCode,
+                    Description = UserNotFoundErrorDescription
+                }
+            });
+        }
+
+        if (!await _userManager.GetTwoFactorEnabledAsync(user))
+        {
+            return (false, new []
+            {
+                new IdentityError
+                {
+                    Code = TwoFactorNotEnabledErrorCode,
+                    Description = TwoFactorNotEnabledErrorDescription
+                }
+            });
+        }
+
+        var result = await TwoFactorAccounts.DisableAsync(_userManager, user);
+
         return (result.Succeeded, result.Errors);
     }
 }

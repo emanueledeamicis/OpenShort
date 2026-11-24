@@ -352,6 +352,9 @@ All environment variables can be configured directly inside the `environment:` s
 # Recovery only: resets the admin password at every start, remove it after use (see "Admin Password Recovery")
 # - ADMIN_PASSWORD_RESET=<new-password>
 
+# Recovery only: turns off two-factor authentication for the admin account at every start, remove it after use (see "Two-Factor Authentication")
+# - ADMIN_2FA_RESET=true
+
 # Optional: reverse proxies allowed to report the client IP address (see "Trusted proxies")
 - TRUSTED_PROXIES=172.30.0.1
 ```
@@ -376,6 +379,25 @@ The new password must follow the same rules as any other password: at least 8 ch
 If the `admin` account was deleted, the recovery creates it again with the new password, at every start for as long as the variable is set.
 
 The reset does not sign out sessions that are already open: a token issued before the reset stays valid until it expires, up to 7 days.
+
+### Two-Factor Authentication
+
+Each user can protect their own account with the codes of an authenticator app (TOTP). It is optional and off by default.
+
+- When it is turned on, 10 recovery codes are shown once: each of them works one time in place of the code of the app.
+- API keys are not affected: a request with an API key never needs a code.
+- Turning it on does not sign out sessions that are already open: a token issued before stays valid until it expires, up to 7 days.
+
+If a user loses both the authenticator app and the recovery codes, another administrator can turn off two-factor authentication for them; their password does not change.
+
+If that user is `admin` and nobody else can do it, use the optional `ADMIN_2FA_RESET` environment variable:
+
+1. Add `ADMIN_2FA_RESET=true` to the OpenShort container environment.
+2. Restart the container. The logs report that two-factor authentication was turned off for the admin account.
+3. Sign in with username `admin` and the usual password, which is not changed.
+4. Remove the environment variable. As long as it is set, two-factor authentication of `admin` is turned off again at every start.
+
+The variable acts on the `admin` account only.
 
 ### JWT Secret Key
 

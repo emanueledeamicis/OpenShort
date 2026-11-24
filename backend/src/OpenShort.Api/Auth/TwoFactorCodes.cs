@@ -16,11 +16,6 @@ public static class TwoFactorCodes
     // Recovery codes of ASP.NET Core Identity: two groups of five characters with a hyphen in between
     private const int RecoveryCodeGroupLength = 5;
 
-    // Names under which the Identity user store keeps the secret and the recovery codes (AspNetUserTokens)
-    private const string StoreLoginProvider = "[AspNetUserStore]";
-    private const string AuthenticatorKeyTokenName = "AuthenticatorKey";
-    private const string RecoveryCodesTokenName = "RecoveryCodes";
-
     /// <summary>
     /// Registers the Identity provider that verifies the codes, for a UserManager built from these options
     /// alone. In the application AddApiEndpoints registers the same provider as a service, which replaces
@@ -95,27 +90,5 @@ public static class TwoFactorCodes
         }
 
         return (await userManager.RedeemTwoFactorRecoveryCodeAsync(user, recoveryCode)).Succeeded;
-    }
-
-    /// <summary>
-    /// Turns two-factor authentication off, then throws away the secret and the recovery codes.
-    /// These are separate saves, in this order: if a later one fails, two-factor authentication is off
-    /// and what is left is replaced by the next setup.
-    /// </summary>
-    public static async Task<IdentityResult> DisableAsync(UserManager<AppUser> userManager, AppUser user)
-    {
-        var disableResult = await userManager.SetTwoFactorEnabledAsync(user, false);
-        if (!disableResult.Succeeded)
-        {
-            return disableResult;
-        }
-
-        var removeKeyResult = await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, AuthenticatorKeyTokenName);
-        if (!removeKeyResult.Succeeded)
-        {
-            return removeKeyResult;
-        }
-
-        return await userManager.RemoveAuthenticationTokenAsync(user, StoreLoginProvider, RecoveryCodesTokenName);
     }
 }

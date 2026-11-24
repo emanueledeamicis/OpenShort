@@ -65,7 +65,7 @@ public class LinkService : ILinkService
             link = await _context.Links
                 .FirstOrDefaultAsync(l => l.Slug == slug && l.Domain == domain);
 
-            if (link == null || !IsAvailable(link) || await IsDomainInactiveAsync(domain))
+            if (link == null || !IsAvailable(link) || !await IsDomainActiveAsync(domain))
             {
                 return null;
             }
@@ -105,10 +105,10 @@ public class LinkService : ILinkService
         return link.IsActive && (!link.ExpiresAt.HasValue || link.ExpiresAt >= DateTime.UtcNow);
     }
 
-    // A link whose domain is not registered keeps working: only a domain turned off stops its links
-    private async Task<bool> IsDomainInactiveAsync(string domain)
+    // A link whose host is not in the list of domains does not redirect, like one of a domain turned off
+    private async Task<bool> IsDomainActiveAsync(string domain)
     {
-        return await _context.Domains.AnyAsync(d => d.Host == domain && !d.IsActive);
+        return await _context.Domains.AnyAsync(d => d.Host == domain && d.IsActive);
     }
 
     public async Task<Link?> CreateAsync(Link link)

@@ -180,13 +180,14 @@ public class RedirectResolutionTests
     }
 
     [Test]
-    public async Task Resolve_ShouldReturnTheLink_WhenItsDomainIsNotRegistered()
+    public async Task Resolve_ShouldReturnNull_WhenItsDomainIsNotRegistered()
     {
         await AddLinkAsync(host: "unregistered.com");
 
         var link = await _linkService.ResolveAndTrackRedirectAsync("unregistered.com", Slug);
 
-        link.Should().NotBeNull();
+        link.Should().BeNull();
+        _clickChannel.Reader.Count.Should().Be(0);
     }
 
     [Test]

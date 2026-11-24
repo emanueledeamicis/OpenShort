@@ -33,8 +33,11 @@ export class AuthService {
         this.isAuthenticatedSubject = new BehaviorSubject<boolean>(hasToken);
     }
 
-    login(identifier: string, password: string): Observable<AuthResponse> {
-        return this.http.post<AuthResponse>(`${this.apiUrl}/login`, { identifier, password }).pipe(
+    // The code is the one of the authenticator app, or a recovery code: only for accounts with two-factor authentication
+    login(identifier: string, password: string, code?: string): Observable<AuthResponse> {
+        const request = code ? { identifier, password, code } : { identifier, password };
+
+        return this.http.post<AuthResponse>(`${this.apiUrl}/login`, request).pipe(
             tap(response => this.handleAuthSuccess(response))
         );
     }

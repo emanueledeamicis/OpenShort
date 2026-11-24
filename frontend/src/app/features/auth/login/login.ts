@@ -21,6 +21,10 @@ export class LoginComponent implements OnInit {
   identifier = '';
   password = '';
   confirmPassword = '';
+
+  // Second step of the login, for an account with two-factor authentication: the password was right
+  isCodeRequired = false;
+  code = '';
   setupUserName = '';
   loading = false;
   loadingStatus = true;
@@ -50,11 +54,18 @@ export class LoginComponent implements OnInit {
   }
 
   onLogin() {
+    if (!this.identifier || !this.password || (this.isCodeRequired && !this.code.trim())) {
+      return;
+    }
+
     this.loading = true;
     this.errorMessage = '';
     this.cdr.detectChanges();
 
-    this.authService.login(this.identifier, this.password).subscribe({
+    // There is no state on the server between the two steps: the same credentials are sent again with the code
+    const code = this.isCodeRequired ? this.code.trim() : undefined;
+
+    this.authService.login(this.identifier, this.password, code).subscribe({
       next: () => {
         this.loading = false;
         this.cdr.detectChanges();
@@ -64,10 +75,51 @@ export class LoginComponent implements OnInit {
       },
       error: (err) => {
         this.loading = false;
-        this.errorMessage = this.extractApiErrorMessage(err, 'Login failed. Please check your credentials.');
+
+        if (err?.status === 401 && err?.error?.requiresTwoFactor === true) {
+          this.askForCode(err);
+        } else {
+          // A 401 here means that the password is no longer accepted: back to the first step
+          if (err?.status === 401 && this.isCodeRequired) {
+            this.backToPassword();
+          }
+
+          this.errorMessage = err?.status === 0
+            ? 'Unable to reach the OpenShort API. Please try again.'
+            : this.extractApiErrorMessage(err, 'Login failed. Please check your credentials.');
+        }
+
         this.cdr.detectChanges();
+
+        // The fields were disabled during the request, which takes the focus away
+        if (this.isCodeRequired) {
+          this.focus('code');
+        }
       }
     });
+  }
+
+  backToPassword() {
+    this.isCodeRequired = false;
+    this.code = '';
+    this.password = '';
+    this.errorMessage = '';
+    this.focus('password');
+  }
+
+  private askForCode(err: any) {
+    // The first answer only asks for the code; from the second step on it means that the code was wrong
+    if (this.isCodeRequired) {
+      this.errorMessage = this.extractApiErrorMessage(err, 'The code is not valid.');
+    }
+
+    this.isCodeRequired = true;
+    this.code = '';
+  }
+
+  // The field may exist, or be enabled again, only after the view is updated
+  private focus(fieldId: string) {
+    setTimeout(() => document.getElementById(fieldId)?.focus());
   }
 
   onSetupAdmin() {

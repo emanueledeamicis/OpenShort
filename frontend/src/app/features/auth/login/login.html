@@ -40,19 +40,43 @@
         </ng-container>
 
         <ng-template #loginForm>
-          <div class="flex flex-col gap-2">
-            <label for="identifier" class="text-surface-900 dark:text-surface-0 font-medium">Email or username</label>
-            <input pInputText id="identifier" type="text" [(ngModel)]="identifier" class="w-full" placeholder="admin"
-              [disabled]="loading" />
-          </div>
+          <ng-container *ngIf="!isCodeRequired; else codeForm">
+            <div class="flex flex-col gap-2">
+              <label for="identifier" class="text-surface-900 dark:text-surface-0 font-medium">Email or username</label>
+              <input pInputText id="identifier" type="text" [(ngModel)]="identifier" class="w-full" placeholder="admin"
+                autocomplete="username" [disabled]="loading" />
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Password</label>
+              <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="******"
+                autocomplete="current-password" [disabled]="loading" (keyup.enter)="onLogin()" />
+            </div>
+
+            <p-button label="Sign In" [loading]="loading" [disabled]="!identifier || !password" (onClick)="onLogin()"
+              styleClass="w-full" />
+          </ng-container>
+        </ng-template>
+
+        <!-- Second step, for an account with two-factor authentication -->
+        <ng-template #codeForm>
+          <p class="text-sm text-surface-600 dark:text-surface-400">
+            Signing in as <strong class="break-all">{{ identifier }}</strong>
+          </p>
 
           <div class="flex flex-col gap-2">
-            <label for="password" class="text-surface-900 dark:text-surface-0 font-medium">Password</label>
-            <input pInputText id="password" type="password" [(ngModel)]="password" class="w-full" placeholder="******"
-              [disabled]="loading" (keyup.enter)="onLogin()" />
+            <label for="code" class="text-surface-900 dark:text-surface-0 font-medium">Authentication code</label>
+            <input pInputText id="code" type="text" [(ngModel)]="code" class="w-full" placeholder="123 456"
+              autocomplete="one-time-code" maxlength="32" aria-describedby="codeHelp" [disabled]="loading"
+              (keyup.enter)="onLogin()" />
+            <small id="codeHelp" class="text-surface-600 dark:text-surface-400">
+              Enter the 6-digit code from your authenticator app, or one of your recovery codes.
+            </small>
           </div>
 
-          <p-button label="Sign In" [loading]="loading" [disabled]="!identifier || !password" (onClick)="onLogin()"
+          <p-button label="Verify" [loading]="loading" [disabled]="!code.trim()" (onClick)="onLogin()"
+            styleClass="w-full" />
+          <p-button label="Back" severity="secondary" [text]="true" [disabled]="loading" (onClick)="backToPassword()"
             styleClass="w-full" />
         </ng-template>
 

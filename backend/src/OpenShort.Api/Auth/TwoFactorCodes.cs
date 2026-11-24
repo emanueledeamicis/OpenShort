@@ -50,6 +50,33 @@ public static class TwoFactorCodes
     }
 
     /// <summary>
+    /// Checks the second factor of a login: the code of the authenticator app, or a recovery code,
+    /// which is used up. A code of the app is accepted once.
+    /// </summary>
+    public static async Task<bool> VerifyForSignInAsync(
+        UserManager<AppUser> userManager,
+        UsedTwoFactorCodes usedCodes,
+        AppUser user,
+        string? code)
+    {
+        var authenticatorCode = Normalize(code);
+        if (authenticatorCode.Length == CodeDigits && authenticatorCode.All(char.IsAsciiDigit))
+        {
+            return await userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, authenticatorCode)
+                && usedCodes.TryUse(user.Id, authenticatorCode);
+        }
+
+        // Recovery codes are written with a hyphen and in upper case
+        var recoveryCode = (code ?? string.Empty).Trim().ToUpperInvariant();
+        if (recoveryCode.Length == 0)
+        {
+            return false;
+        }
+
+        return (await userManager.RedeemTwoFactorRecoveryCodeAsync(user, recoveryCode)).Succeeded;
+    }
+
+    /// <summary>
     /// Turns two-factor authentication off, then throws away the secret and the recovery codes.
     /// These are separate saves, in this order: if a later one fails, two-factor authentication is off
     /// and what is left is replaced by the next setup.

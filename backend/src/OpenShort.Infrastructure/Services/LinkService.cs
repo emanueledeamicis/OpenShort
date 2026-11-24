@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
@@ -10,7 +9,6 @@ namespace OpenShort.Infrastructure.Services;
 
 public class LinkService : ILinkService
 {
-    private const string RedirectCacheKeyPrefix = "redirect";
     private const string CacheDurationSecondsSettingKey = "CacheDurationSeconds";
     private const string ClickEventChannelFullMessage = "Failed to enqueue click event for {Domain}/{Slug}. Channel might be full.";
     private const string MySqlDuplicateEntryMessage = "Duplicate entry";
@@ -19,7 +17,7 @@ public class LinkService : ILinkService
 
     private readonly AppDbContext _context;
     private readonly ISlugGenerator _slugGenerator;
-    private readonly IMemoryCache _cache;
+    private readonly RedirectCache _redirectCache;
     private readonly ISettingService _settingService;
     private readonly ChannelWriter<ClickEvent> _clickChannel;
     private readonly ILogger<LinkService> _logger;
@@ -27,14 +25,14 @@ public class LinkService : ILinkService
     public LinkService(
         AppDbContext context, 
         ISlugGenerator slugGenerator, 
-        IMemoryCache cache, 
+        RedirectCache redirectCache,
         ISettingService settingService,
         ChannelWriter<ClickEvent> clickChannel,
         ILogger<LinkService> logger)
     {
         _context = context;
         _slugGenerator = slugGenerator;
-        _cache = cache;
+        _redirectCache = redirectCache;
         _settingService = settingService;
         _clickChannel = clickChannel;
         _logger = logger;
@@ -57,46 +55,60 @@ public class LinkService : ILinkService
 
     public async Task<Link?> ResolveAndTrackRedirectAsync(string domain, string slug)
     {
-        var cacheKey = BuildRedirectCacheKey(domain, slug);
-
         // 1. Try get from cache
-        if (!_cache.TryGetValue(cacheKey, out Link? link))
+        if (!_redirectCache.TryGet(domain, slug, out var link))
         {
+            // Read before the database: a link loaded while the cache is being emptied must not be stored
+            var cacheGeneration = _redirectCache.CurrentGeneration;
+
             // 2. If not in cache, get from DB
             link = await _context.Links
                 .FirstOrDefaultAsync(l => l.Slug == slug && l.Domain == domain);
 
-            if (link != null && link.IsActive && (!link.ExpiresAt.HasValue || link.ExpiresAt >= DateTime.UtcNow))
+            if (link == null || !IsAvailable(link) || await IsDomainInactiveAsync(domain))
             {
-                // 3. Save to cache if valid
-                var cacheDurationSeconds = await _settingService.GetSettingAsync(CacheDurationSecondsSettingKey, 60);
-                if (cacheDurationSeconds > 0)
-                {
-                    var cacheEntryOptions = new MemoryCacheEntryOptions()
-                        .SetAbsoluteExpiration(TimeSpan.FromSeconds(cacheDurationSeconds));
-                    
-                    _cache.Set(cacheKey, link, cacheEntryOptions);
-                }
+                return null;
+            }
+
+            // 3. Save to cache if valid
+            var cacheDurationSeconds = await _settingService.GetSettingAsync(CacheDurationSecondsSettingKey, 60);
+            if (cacheDurationSeconds > 0)
+            {
+                _redirectCache.Set(domain, slug, link, TimeSpan.FromSeconds(cacheDurationSeconds), cacheGeneration);
             }
         }
 
-        // 4. Track click asynchronously if a valid link was resolved
-        if (link != null && link.IsActive && (!link.ExpiresAt.HasValue || link.ExpiresAt >= DateTime.UtcNow))
+        // A link can expire while it is in the cache
+        if (link == null || !IsAvailable(link))
         {
-            var clickEvent = new ClickEvent
-            {
-                Slug = slug,
-                Domain = domain,
-                Timestamp = DateTime.UtcNow
-            };
-            
-            if (!_clickChannel.TryWrite(clickEvent))
-            {
-                _logger.LogWarning(ClickEventChannelFullMessage, domain, slug);
-            }
+            return null;
+        }
+
+        // 4. Track click asynchronously
+        var clickEvent = new ClickEvent
+        {
+            Slug = slug,
+            Domain = domain,
+            Timestamp = DateTime.UtcNow
+        };
+
+        if (!_clickChannel.TryWrite(clickEvent))
+        {
+            _logger.LogWarning(ClickEventChannelFullMessage, domain, slug);
         }
 
         return link;
+    }
+
+    private static bool IsAvailable(Link link)
+    {
+        return link.IsActive && (!link.ExpiresAt.HasValue || link.ExpiresAt >= DateTime.UtcNow);
+    }
+
+    // A link whose domain is not registered keeps working: only a domain turned off stops its links
+    private async Task<bool> IsDomainInactiveAsync(string domain)
+    {
+        return await _context.Domains.AnyAsync(d => d.Host == domain && !d.IsActive);
     }
 
     public async Task<Link?> CreateAsync(Link link)
@@ -158,8 +170,8 @@ public class LinkService : ILinkService
             await _context.SaveChangesAsync();
             
             // Invalidate cache
-            _cache.Remove(BuildRedirectCacheKey(link.Domain, link.Slug));
-            
+            _redirectCache.Remove(link.Domain, link.Slug);
+
             return true;
         }
         catch (DbUpdateConcurrencyException)
@@ -184,8 +196,8 @@ public class LinkService : ILinkService
         await _context.SaveChangesAsync();
         
         // Invalidate cache
-        _cache.Remove(BuildRedirectCacheKey(link.Domain, link.Slug));
-        
+        _redirectCache.Remove(link.Domain, link.Slug);
+
         return true;
     }
 
@@ -193,6 +205,4 @@ public class LinkService : ILinkService
     {
         return await _context.Links.AnyAsync(e => e.Id == id);
     }
-
-    private static string BuildRedirectCacheKey(string domain, string slug) => $"{RedirectCacheKeyPrefix}_{domain}_{slug}";
 }

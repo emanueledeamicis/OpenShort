@@ -29,12 +29,10 @@ public class AuthController : ControllerBase
     private const string UnexpectedAdminSetupErrorMessage = "An unexpected error occurred during admin setup.";
     private const string UnexpectedRegistrationErrorMessage = "An unexpected error occurred during registration.";
 
-    // Stands for the client address where the failures of every address are counted together
-    private const string AnyClientAddress = "any";
-
     private readonly UserManager<AppUser> _userManager;
     private readonly ITokenService _tokenService;
     private readonly LoginThrottle _loginThrottle;
+    private readonly TwoFactorCodeThrottle _twoFactorCodeThrottle;
     private readonly UsedTwoFactorCodes _usedTwoFactorCodes;
     private readonly ISettingService _settingService;
     private readonly ILogger<AuthController> _logger;
@@ -43,6 +41,7 @@ public class AuthController : ControllerBase
         UserManager<AppUser> userManager,
         ITokenService tokenService,
         LoginThrottle loginThrottle,
+        TwoFactorCodeThrottle twoFactorCodeThrottle,
         UsedTwoFactorCodes usedTwoFactorCodes,
         ISettingService settingService,
         ILogger<AuthController> logger)
@@ -50,6 +49,7 @@ public class AuthController : ControllerBase
         _userManager = userManager;
         _tokenService = tokenService;
         _loginThrottle = loginThrottle;
+        _twoFactorCodeThrottle = twoFactorCodeThrottle;
         _usedTwoFactorCodes = usedTwoFactorCodes;
         _settingService = settingService;
         _logger = logger;
@@ -102,13 +102,19 @@ public class AuthController : ControllerBase
                     return Unauthorized(new TwoFactorRequiredResponse { Message = TwoFactorCodeRequiredMessage });
                 }
 
-                // Wrong codes are counted on the account, whatever the address: only someone who has the
-                // password gets here, and spreading the attempts over many addresses must not help guessing the code
-                var codeAttempt = await _loginThrottle.AttemptAsync(
-                    GetTwoFactorThrottleSubject(user),
-                    AnyClientAddress,
-                    () => TwoFactorCodes.VerifyForSignInAsync(_userManager, _usedTwoFactorCodes, user, request.Code),
-                    HttpContext.RequestAborted);
+                // Wrong codes of the app are counted on the account, whatever the address. Recovery codes are too
+                // long to be guessed: they are counted for each address like passwords, so the owner can still
+                // sign in with one while somebody else who knows the password keeps the codes of the app delayed
+                var codeAttempt = TwoFactorCodes.IsAuthenticatorCode(request.Code)
+                    ? await _twoFactorCodeThrottle.AttemptAsync(
+                        user.Id,
+                        () => TwoFactorCodes.VerifyAuthenticatorCodeForSignInAsync(_userManager, _usedTwoFactorCodes, user, request.Code),
+                        HttpContext.RequestAborted)
+                    : await _loginThrottle.AttemptAsync(
+                        GetRecoveryCodeThrottleSubject(user),
+                        ClientAddress.GetPartitionKey(HttpContext),
+                        () => TwoFactorCodes.RedeemRecoveryCodeForSignInAsync(_userManager, user, request.Code),
+                        HttpContext.RequestAborted);
 
                 if (codeAttempt.RetryAfter is { } codeRetryAfter)
                 {
@@ -264,9 +270,9 @@ public class AuthController : ControllerBase
             new { message = string.Format(CultureInfo.InvariantCulture, LoginDelayedMessageFormat, retryAfterSeconds) });
     }
 
-    private static string GetTwoFactorThrottleSubject(AppUser user)
+    private static string GetRecoveryCodeThrottleSubject(AppUser user)
     {
-        return $"two-factor:{user.Id}";
+        return $"recovery-code:{user.Id}";
     }
 
     // Failures are counted on the account when the identifier matches one, whatever its spelling:

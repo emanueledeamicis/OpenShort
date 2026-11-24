@@ -13,6 +13,9 @@ public static class TwoFactorCodes
 
     private const int CodeDigits = 6;
 
+    // Recovery codes of ASP.NET Core Identity: two groups of five characters with a hyphen in between
+    private const int RecoveryCodeGroupLength = 5;
+
     // Names under which the Identity user store keeps the secret and the recovery codes (AspNetUserTokens)
     private const string StoreLoginProvider = "[AspNetUserStore]";
     private const string AuthenticatorKeyTokenName = "AuthenticatorKey";
@@ -46,31 +49,49 @@ public static class TwoFactorCodes
     /// </summary>
     public static string Normalize(string? code)
     {
-        return (code ?? string.Empty).Replace(" ", string.Empty).Replace("-", string.Empty);
+        return string.Concat((code ?? string.Empty).Where(character => !char.IsWhiteSpace(character) && character != '-'));
     }
 
     /// <summary>
-    /// Checks the second factor of a login: the code of the authenticator app, or a recovery code,
-    /// which is used up. A code of the app is accepted once.
+    /// Tells a code of the authenticator app, six digits, from anything else, which at login is read
+    /// as a recovery code.
     /// </summary>
-    public static async Task<bool> VerifyForSignInAsync(
+    public static bool IsAuthenticatorCode(string? code)
+    {
+        var authenticatorCode = Normalize(code);
+        return authenticatorCode.Length == CodeDigits && authenticatorCode.All(char.IsAsciiDigit);
+    }
+
+    /// <summary>
+    /// Checks the code of the authenticator app at login. A code is accepted once.
+    /// </summary>
+    public static async Task<bool> VerifyAuthenticatorCodeForSignInAsync(
         UserManager<AppUser> userManager,
         UsedTwoFactorCodes usedCodes,
         AppUser user,
         string? code)
     {
         var authenticatorCode = Normalize(code);
-        if (authenticatorCode.Length == CodeDigits && authenticatorCode.All(char.IsAsciiDigit))
-        {
-            return await userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, authenticatorCode)
-                && usedCodes.TryUse(user.Id, authenticatorCode);
-        }
+        return await userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, authenticatorCode)
+            && usedCodes.TryUse(user.Id, authenticatorCode);
+    }
 
-        // Recovery codes are written with a hyphen and in upper case
-        var recoveryCode = (code ?? string.Empty).Trim().ToUpperInvariant();
+    /// <summary>
+    /// Checks a recovery code at login and uses it up. The code is accepted however it was typed:
+    /// in lower case, without the hyphen, with spaces.
+    /// </summary>
+    public static async Task<bool> RedeemRecoveryCodeForSignInAsync(UserManager<AppUser> userManager, AppUser user, string? code)
+    {
+        var recoveryCode = Normalize(code).ToUpperInvariant();
         if (recoveryCode.Length == 0)
         {
             return false;
+        }
+
+        // The stored codes are in upper case, with the hyphen
+        if (recoveryCode.Length == RecoveryCodeGroupLength * 2)
+        {
+            recoveryCode = $"{recoveryCode[..RecoveryCodeGroupLength]}-{recoveryCode[RecoveryCodeGroupLength..]}";
         }
 
         return (await userManager.RedeemTwoFactorRecoveryCodeAsync(user, recoveryCode)).Succeeded;

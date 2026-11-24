@@ -6,8 +6,8 @@ namespace OpenShort.Api.Auth;
 
 /// <summary>
 /// Slows down repeated failed logins with a delay that grows at every consecutive failure.
-/// The delay applies to the pair of login subject and client address, so an attacker
-/// slows down only their own attempts and cannot keep the account owner out.
+/// The delay applies to the pair of login subject and client address: counted on the address of the client,
+/// an attacker slows down only their own attempts and cannot keep the account owner out.
 /// The subject is chosen by the caller: the account when the identifier matches one,
 /// so that every spelling of the same account shares one count.
 /// State is kept in memory: it is lost when the application restarts.

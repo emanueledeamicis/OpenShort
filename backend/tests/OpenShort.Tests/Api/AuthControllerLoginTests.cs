@@ -37,6 +37,7 @@ public class AuthControllerLoginTests
     private Mock<ITokenService> _tokenServiceMock = null!;
     private Mock<ISettingService> _settingServiceMock = null!;
     private ManualTimeProvider _timeProvider = null!;
+    private LoginThrottle _loginThrottle = null!;
     private AuthController _controller = null!;
 
     [SetUp]
@@ -65,10 +66,12 @@ public class AuthControllerLoginTests
 
         _settingServiceMock = new Mock<ISettingService>();
         _timeProvider = new ManualTimeProvider();
+        _loginThrottle = new LoginThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance);
         _controller = new AuthController(
             _userManager,
             _tokenServiceMock.Object,
-            new LoginThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance),
+            _loginThrottle,
+            new TwoFactorCodeThrottle(_timeProvider, NullLogger<LoginThrottle>.Instance),
             new UsedTwoFactorCodes(_timeProvider),
             _settingServiceMock.Object,
             new Mock<ILogger<AuthController>>().Object);
@@ -438,6 +441,19 @@ public class AuthControllerLoginTests
     }
 
     [Test]
+    public async Task Login_ShouldReturnUnauthorized_WhenTheCodeOfTheAppIsWrong()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+
+        // Act
+        var result = await LoginAsync(Password, code: WrongCode(sharedKey));
+
+        // Assert
+        ShouldAskForTheSecondFactor(result);
+    }
+
+    [Test]
     public async Task Login_ShouldReturnUnauthorized_WhenTheCodeIsOld()
     {
         // Arrange
@@ -500,11 +516,31 @@ public class AuthControllerLoginTests
     }
 
     [Test]
+    public async Task Login_ShouldAcceptARecoveryCode_WrittenWithoutTheHyphenOrWithSpaces()
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        var recoveryCodes = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 2))!.ToList();
+        var withoutHyphen = recoveryCodes[0].Replace("-", string.Empty);
+        var withSpaces = recoveryCodes[1].Replace("-", " - ");
+
+        // Act
+        var withoutHyphenResult = await LoginAsync(Password, code: withoutHyphen);
+        var withSpacesResult = await LoginAsync(Password, code: withSpaces);
+
+        // Assert
+        withoutHyphenResult.Result.Should().BeOfType<OkObjectResult>();
+        withSpacesResult.Result.Should().BeOfType<OkObjectResult>();
+        (await _userManager.CountRecoveryCodesAsync(user!)).Should().Be(0);
+    }
+
+    [Test]
     public async Task Login_ShouldDelayTheCodes_AfterRepeatedWrongCodes_FromEveryAddress()
     {
         // Arrange
         var sharedKey = await EnableTwoFactorAsync();
-        await FailTwoFactorAsync(times: 3);
+        await FailTwoFactorAsync(sharedKey, times: 3);
 
         // Act: the right code, from the same address and from another one
         var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
@@ -526,7 +562,7 @@ public class AuthControllerLoginTests
     {
         // Arrange
         var sharedKey = await EnableTwoFactorAsync();
-        await FailTwoFactorAsync(times: 3);
+        await FailTwoFactorAsync(sharedKey, times: 3);
         _timeProvider.Advance(LoginThrottle.GetDelay(3));
 
         // Act
@@ -537,21 +573,92 @@ public class AuthControllerLoginTests
     }
 
     [Test]
-    public async Task Login_ShouldDelayRecoveryCodes_AfterRepeatedWrongCodes()
+    public async Task Login_ShouldForgetTheWrongCodes_AfterARightOne()
     {
         // Arrange
-        await EnableTwoFactorAsync();
-        var user = await _userManager.FindByNameAsync(UserName);
-        var recoveryCode = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 1))!.Single();
-        await FailTwoFactorAsync(times: 3);
+        var sharedKey = await EnableTwoFactorAsync();
+        await FailTwoFactorAsync(sharedKey, times: 2);
+        (await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey))).Result.Should().BeOfType<OkObjectResult>();
+        await FailTwoFactorAsync(sharedKey, times: 2);
+
+        // Act: a code is accepted once, so this is the one of the next half minute
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey, DateTimeOffset.UtcNow.AddSeconds(30)));
+
+        // Assert: without the reset the four failures would have caused a delay
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldDelayTheCodes_WhenTheTableOfFailedLoginsIsFull()
+    {
+        // Arrange: failed logins on made-up names fill the table shared by the passwords
+        var sharedKey = await EnableTwoFactorAsync();
+        for (var client = 0; client < LoginThrottle.MaxTrackedClients; client++)
+        {
+            await _loginThrottle.AttemptAsync($"identifier:made-up-{client}", AttackerAddress, () => Task.FromResult(false));
+        }
+
+        await FailTwoFactorAsync(sharedKey, times: 3);
 
         // Act
-        var result = await LoginAsync(Password, code: recoveryCode);
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
 
         // Assert
         result.Result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+    }
+
+    [Test]
+    public async Task Login_ShouldAcceptARecoveryCode_WhileTheCodesOfTheAppAreDelayed()
+    {
+        // Arrange: somebody who knows the password keeps the codes of the app delayed
+        var sharedKey = await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        var recoveryCode = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 1))!.Single();
+        await FailTwoFactorAsync(sharedKey, times: 3);
+
+        // Act: the owner, from the same address and from another one
+        var appCodeResult = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey), address: OwnerAddress);
+        var result = await LoginAsync(Password, code: recoveryCode, address: OwnerAddress);
+
+        // Assert
+        appCodeResult.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Test]
+    public async Task Login_ShouldDelayRecoveryCodes_AfterRepeatedWrongOnes_FromTheSameAddressOnly()
+    {
+        // Arrange
+        await EnableTwoFactorAsync();
+        var user = await _userManager.FindByNameAsync(UserName);
+        var recoveryCodes = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user!, 2))!.ToList();
+        await FailRecoveryCodeAsync(times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, code: recoveryCodes[0]);
+        var otherAddressResult = await LoginAsync(Password, code: recoveryCodes[1], address: OwnerAddress);
+
+        // Assert
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status429TooManyRequests);
+        otherAddressResult.Result.Should().BeOfType<OkObjectResult>();
         (await _userManager.CountRecoveryCodesAsync(user!)).Should().Be(1);
+    }
+
+    [Test]
+    public async Task Login_ShouldNotDelayTheCodesOfTheApp_AfterWrongRecoveryCodes()
+    {
+        // Arrange
+        var sharedKey = await EnableTwoFactorAsync();
+        await FailRecoveryCodeAsync(times: 3);
+
+        // Act
+        var result = await LoginAsync(Password, code: TotpGenerator.Generate(sharedKey));
+
+        // Assert
+        result.Result.Should().BeOfType<OkObjectResult>();
     }
 
     [Test]
@@ -576,7 +683,7 @@ public class AuthControllerLoginTests
     {
         // Arrange
         var sharedKey = await EnableTwoFactorAsync();
-        await FailTwoFactorAsync(times: 3);
+        await FailTwoFactorAsync(sharedKey, times: 3);
 
         // Act
         ShouldAskForTheSecondFactor(await LoginAsync(Password));
@@ -591,9 +698,9 @@ public class AuthControllerLoginTests
     public async Task Login_ShouldNotDelayAnotherAccount_WhenWrongCodesAreSentForOne()
     {
         // Arrange
-        await EnableTwoFactorAsync();
+        var sharedKey = await EnableTwoFactorAsync();
         await CreateAdministratorAsync("second@example.com", Password);
-        await FailTwoFactorAsync(times: 3);
+        await FailTwoFactorAsync(sharedKey, times: 3);
 
         // Act
         var result = await LoginAsync(Password, identifier: "second@example.com");
@@ -644,13 +751,38 @@ public class AuthControllerLoginTests
         return (await _userManager.GetAuthenticatorKeyAsync(user!))!;
     }
 
-    private async Task FailTwoFactorAsync(int times)
+    // Six digits that are not a code the application would accept now
+    private static string WrongCode(string sharedKey)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var acceptedCodes = Enumerable.Range(-3, 7)
+            .Select(step => TotpGenerator.Generate(sharedKey, now.AddSeconds(step * 30)))
+            .ToHashSet();
+
+        return Enumerable.Range(0, 10).Select(number => number.ToString("D6")).First(code => !acceptedCodes.Contains(code));
+    }
+
+    // Sends wrong codes of the authenticator app
+    private async Task FailTwoFactorAsync(string sharedKey, int times)
+    {
+        for (var failures = 1; failures <= times; failures++)
+        {
+            ShouldAskForTheSecondFactor(await LoginAsync(Password, code: WrongCode(sharedKey)));
+
+            // Wait out the delay between attempts; the delay caused by the last failure is left pending
+            if (failures < times)
+            {
+                _timeProvider.Advance(LoginThrottle.GetDelay(failures));
+            }
+        }
+    }
+
+    private async Task FailRecoveryCodeAsync(int times)
     {
         for (var failures = 1; failures <= times; failures++)
         {
             ShouldAskForTheSecondFactor(await LoginAsync(Password, code: "not-a-code"));
 
-            // Wait out the delay between attempts; the delay caused by the last failure is left pending
             if (failures < times)
             {
                 _timeProvider.Advance(LoginThrottle.GetDelay(failures));

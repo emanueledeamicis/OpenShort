@@ -58,8 +58,8 @@ public class LinkService : ILinkService
         // 1. Try get from cache
         if (!_redirectCache.TryGet(domain, slug, out var link))
         {
-            // Read before the database: a link loaded while the cache is being emptied must not be stored
-            var cacheGeneration = _redirectCache.CurrentGeneration;
+            // Taken before the database: a link loaded while it is being changed or removed must not be stored
+            var cacheSnapshot = _redirectCache.TakeSnapshot();
 
             // 2. If not in cache, get from DB
             link = await _context.Links
@@ -74,7 +74,7 @@ public class LinkService : ILinkService
             var cacheDurationSeconds = await _settingService.GetSettingAsync(CacheDurationSecondsSettingKey, 60);
             if (cacheDurationSeconds > 0)
             {
-                _redirectCache.Set(domain, slug, link, TimeSpan.FromSeconds(cacheDurationSeconds), cacheGeneration);
+                _redirectCache.Set(domain, slug, link, TimeSpan.FromSeconds(cacheDurationSeconds), cacheSnapshot);
             }
         }
 

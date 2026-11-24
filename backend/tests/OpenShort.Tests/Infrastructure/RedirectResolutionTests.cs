@@ -22,6 +22,7 @@ public class RedirectResolutionTests
     private MemoryCache _memoryCache = null!;
     private RedirectCache _redirectCache = null!;
     private Channel<ClickEvent> _clickChannel = null!;
+    private Mock<ISettingService> _settingService = null!;
     private LinkService _linkService = null!;
     private DomainService _domainService = null!;
     private Domain _domain = null!;
@@ -38,14 +39,14 @@ public class RedirectResolutionTests
         _redirectCache = new RedirectCache(_memoryCache);
         _clickChannel = Channel.CreateUnbounded<ClickEvent>();
 
-        var settingService = new Mock<ISettingService>();
-        settingService.Setup(s => s.GetSettingAsync("CacheDurationSeconds", It.IsAny<int>())).ReturnsAsync(600);
+        _settingService = new Mock<ISettingService>();
+        SetCacheDuration(600);
 
         _linkService = new LinkService(
             _context,
             new Mock<ISlugGenerator>().Object,
             _redirectCache,
-            settingService.Object,
+            _settingService.Object,
             _clickChannel.Writer,
             new Mock<ILogger<LinkService>>().Object);
         _domainService = new DomainService(_context, _redirectCache);
@@ -87,6 +88,46 @@ public class RedirectResolutionTests
         var link = await _linkService.ResolveAndTrackRedirectAsync(Host, Slug);
 
         link.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task Resolve_ShouldNotStoreTheLink_WhenTheCacheIsTurnedOff()
+    {
+        SetCacheDuration(0);
+        await AddLinkAsync();
+
+        var link = await _linkService.ResolveAndTrackRedirectAsync(Host, Slug);
+
+        link.Should().NotBeNull();
+        _redirectCache.TryGet(Host, Slug, out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Resolve_ShouldReturnNullAtOnce_WhenTheLinkIsTurnedOff()
+    {
+        var stored = await AddLinkAsync();
+        await _linkService.ResolveAndTrackRedirectAsync(Host, Slug);
+
+        stored.IsActive = false;
+        await _linkService.UpdateAsync(stored);
+
+        var link = await _linkService.ResolveAndTrackRedirectAsync(Host, Slug);
+
+        link.Should().BeNull();
+        _redirectCache.TryGet(Host, Slug, out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Resolve_ShouldReturnNullAtOnce_WhenTheLinkIsDeleted()
+    {
+        var stored = await AddLinkAsync();
+        await _linkService.ResolveAndTrackRedirectAsync(Host, Slug);
+
+        await _linkService.DeleteAsync(stored.Id);
+
+        var link = await _linkService.ResolveAndTrackRedirectAsync(Host, Slug);
+
+        link.Should().BeNull();
     }
 
     [Test]
@@ -208,10 +249,10 @@ public class RedirectResolutionTests
     public async Task Set_ShouldNotStoreTheLink_WhenTheCacheWasEmptiedAfterItWasLoaded()
     {
         var stored = await AddLinkAsync();
-        var generation = _redirectCache.CurrentGeneration;
+        var snapshot = _redirectCache.TakeSnapshot();
 
         _redirectCache.Clear();
-        _redirectCache.Set(Host, Slug, stored, TimeSpan.FromMinutes(10), generation);
+        _redirectCache.Set(Host, Slug, stored, TimeSpan.FromMinutes(10), snapshot);
 
         _redirectCache.TryGet(Host, Slug, out _).Should().BeFalse();
     }
@@ -222,10 +263,39 @@ public class RedirectResolutionTests
         var stored = await AddLinkAsync();
         _redirectCache.Clear();
 
-        _redirectCache.Set(Host, Slug, stored, TimeSpan.FromMinutes(10), _redirectCache.CurrentGeneration);
+        _redirectCache.Set(Host, Slug, stored, TimeSpan.FromMinutes(10), _redirectCache.TakeSnapshot());
 
         _redirectCache.TryGet(Host, Slug, out var link).Should().BeTrue();
         link.Should().BeSameAs(stored);
+    }
+
+    // The request that loaded a link while it was being changed must not put the old one back
+    [Test]
+    public async Task Set_ShouldNotStoreTheLink_WhenALinkWasRemovedAfterItWasLoaded()
+    {
+        var stored = await AddLinkAsync();
+        var snapshot = _redirectCache.TakeSnapshot();
+
+        _redirectCache.Remove(Host, Slug);
+        _redirectCache.Set(Host, Slug, stored, TimeSpan.FromMinutes(10), snapshot);
+
+        _redirectCache.TryGet(Host, Slug, out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Remove_ShouldFindTheLink_WhateverTheCaseOfTheHost()
+    {
+        var stored = await AddLinkAsync();
+        _redirectCache.Set("TEST.com", Slug, stored, TimeSpan.FromMinutes(10), _redirectCache.TakeSnapshot());
+
+        _redirectCache.Remove(Host, Slug);
+
+        _redirectCache.TryGet("TEST.com", Slug, out _).Should().BeFalse();
+    }
+
+    private void SetCacheDuration(int seconds)
+    {
+        _settingService.Setup(s => s.GetSettingAsync("CacheDurationSeconds", It.IsAny<int>())).ReturnsAsync(seconds);
     }
 
     private async Task<Link> AddLinkAsync(string host = Host, bool isActive = true, DateTime? expiresAt = null)

@@ -21,12 +21,13 @@ public class UserService : IUserService
         _userManager = userManager;
     }
 
-    // Every user, not the administrators only: a user without the role can sign in as well
+    // Every user, not the administrators only: a user without the role can sign in as well.
+    // In no particular order: the Users page sorts them
     public async Task<IReadOnlyList<UserAccount>> GetAllAsync()
     {
         var administrators = await _userManager.GetUsersInRoleAsync(DatabaseInitializer.AdminRoleName);
         var administratorIds = administrators.Select(administrator => administrator.Id).ToHashSet();
-        var users = await _userManager.Users.OrderBy(user => user.CreatedAt).ToListAsync();
+        var users = await _userManager.Users.ToListAsync();
 
         return users.Select(user => new UserAccount(user, administratorIds.Contains(user.Id))).ToList();
     }

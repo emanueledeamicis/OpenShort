@@ -29,8 +29,9 @@
             <ng-template pTemplate="body" let-user>
                 <tr>
                     <td class="font-medium text-surface-900 dark:text-surface-0">
-                        <div class="flex items-center gap-2">
-                            <!-- A long address wraps inside the cell instead of widening the page -->
+                        <!-- A long address wraps inside the cell instead of widening the page. The minimum width
+                             keeps an ordinary one whole; the label goes below before the address is broken -->
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-[16rem]">
                             <span class="min-w-0 break-all">{{ user.email || '-' }}</span>
                             <span *ngIf="!user.isAdmin"
                                 class="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-700 whitespace-nowrap">
@@ -38,7 +39,9 @@
                             </span>
                         </div>
                     </td>
-                    <td class="text-surface-600 dark:text-surface-400 break-all">{{ user.userName }}</td>
+                    <td class="text-surface-600 dark:text-surface-400 break-all">
+                        <div class="min-w-[10rem]">{{ user.userName }}</div>
+                    </td>
                     <td class="text-surface-600 dark:text-surface-400">{{ user.createdAt | date:'medium' }}</td>
                     <td class="text-surface-600 dark:text-surface-400">{{ user.twoFactorEnabled ? 'On' : 'Off' }}</td>
                     <td>

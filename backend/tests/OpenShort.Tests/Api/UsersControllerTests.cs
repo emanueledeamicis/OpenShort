@@ -63,7 +63,7 @@ public class UsersControllerTests
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
 
-        _userServiceMock.Verify(service => service.DeleteAdminAsync(It.IsAny<string>()), Times.Never);
+        _userServiceMock.Verify(service => service.DeleteAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Test]
@@ -71,20 +71,22 @@ public class UsersControllerTests
     {
         // Arrange
         _userServiceMock
-            .Setup(service => service.GetAllAdminsAsync())
+            .Setup(service => service.GetAllAsync())
             .ReturnsAsync(
             [
-                new AppUser { Id = "user-1", UserName = "admin", TwoFactorEnabled = true },
-                new AppUser { Id = "user-2", UserName = "second@example.com" }
+                new UserAccount(new AppUser { Id = "user-1", UserName = "admin", TwoFactorEnabled = true }, IsAdmin: true),
+                new UserAccount(new AppUser { Id = "user-2", UserName = "second@example.com" }, IsAdmin: false)
             ]);
 
         // Act
         var result = await _controller.GetUsers();
 
         // Assert
-        var users = result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<IEnumerable<AdminUserDto>>().Subject.ToList();
+        var users = result.Result.Should().BeOfType<OkObjectResult>().Which.Value.Should().BeAssignableTo<IEnumerable<UserDto>>().Subject.ToList();
         users.Single(user => user.Id == "user-1").TwoFactorEnabled.Should().BeTrue();
         users.Single(user => user.Id == "user-2").TwoFactorEnabled.Should().BeFalse();
+        users.Single(user => user.Id == "user-1").IsAdmin.Should().BeTrue();
+        users.Single(user => user.Id == "user-2").IsAdmin.Should().BeFalse();
     }
 
     [Test]
@@ -152,7 +154,7 @@ public class UsersControllerTests
         // Assert
         result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        _userServiceMock.Verify(service => service.DeleteAdminAsync(It.IsAny<string>()), Times.Never);
+        _userServiceMock.Verify(service => service.DeleteAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Test]
@@ -263,7 +265,7 @@ public class UsersControllerTests
         };
 
         _userServiceMock
-            .Setup(service => service.DeleteAdminAsync("user-456"))
+            .Setup(service => service.DeleteAsync("user-456"))
             .ReturnsAsync((false, new[]
             {
                 new IdentityError

@@ -37,23 +37,24 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<AdminUserDto>>> GetUsers()
+    public async Task<ActionResult<IEnumerable<UserDto>>> GetUsers()
     {
-        var users = await _userService.GetAllAdminsAsync();
-        var userDtos = users.Select(u => new AdminUserDto
+        var accounts = await _userService.GetAllAsync();
+        var userDtos = accounts.Select(account => new UserDto
         {
-            Id = u.Id,
-            UserName = u.UserName ?? string.Empty,
-            Email = u.Email,
-            CreatedAt = u.CreatedAt,
-            TwoFactorEnabled = u.TwoFactorEnabled
+            Id = account.User.Id,
+            UserName = account.User.UserName ?? string.Empty,
+            Email = account.User.Email,
+            CreatedAt = account.User.CreatedAt,
+            TwoFactorEnabled = account.User.TwoFactorEnabled,
+            IsAdmin = account.IsAdmin
         });
         
         return Ok(userDtos);
     }
 
     [HttpPost]
-    public async Task<ActionResult<AdminUserDto>> CreateUser([FromBody] CreateUserRequest request)
+    public async Task<ActionResult<UserDto>> CreateUser([FromBody] CreateUserRequest request)
     {
         try
         {
@@ -62,12 +63,13 @@ public class UsersController : ControllerBase
             if (user != null)
             {
                 _logger.LogInformation("User created: {Email}", request.Email);
-                return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, new AdminUserDto
+                return CreatedAtAction(nameof(GetUsers), new { id = user.Id }, new UserDto
                 {
                     Id = user.Id,
                     UserName = user.UserName ?? string.Empty,
                     Email = user.Email,
-                    CreatedAt = user.CreatedAt
+                    CreatedAt = user.CreatedAt,
+                    IsAdmin = true
                 });
             }
 
@@ -94,7 +96,7 @@ public class UsersController : ControllerBase
                 return Problem(statusCode: StatusCodes.Status400BadRequest, detail: CurrentUserDeletionForbiddenMessage);
             }
 
-            var (success, errors) = await _userService.DeleteAdminAsync(id);
+            var (success, errors) = await _userService.DeleteAsync(id);
 
             if (success)
             {
@@ -126,7 +128,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Turns two-factor authentication off for another administrator who lost both the authenticator app
+    /// Turns two-factor authentication off for another user who lost both the authenticator app
     /// and the recovery codes. Their password is not changed.
     /// </summary>
     [HttpDelete("{id}/two-factor")]
@@ -202,13 +204,16 @@ public class UsersController : ControllerBase
     }
 }
 
-public class AdminUserDto
+public class UserDto
 {
     public required string Id { get; set; }
     public required string UserName { get; set; }
     public string? Email { get; set; }
     public DateTime CreatedAt { get; set; }
     public bool TwoFactorEnabled { get; set; }
+
+    // False for a user left without the Admin role: it can sign in, but not manage users and settings
+    public bool IsAdmin { get; set; }
 }
 
 public class CreateUserRequest

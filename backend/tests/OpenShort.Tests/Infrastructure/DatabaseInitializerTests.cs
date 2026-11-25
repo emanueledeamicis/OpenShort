@@ -684,7 +684,7 @@ public class DatabaseInitializerTests
         otherAdmin.Should().NotBeNull();
 
         var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
-        var (deleted, _) = await userService.DeleteAdminAsync(admin!.Id);
+        var (deleted, _) = await userService.DeleteAsync(admin!.Id);
         deleted.Should().BeTrue();
         return true;
     });
@@ -693,7 +693,7 @@ public class DatabaseInitializerTests
     {
         var userManager = services.GetRequiredService<UserManager<AppUser>>();
         var admin = await userManager.FindByNameAsync(DatabaseInitializer.AdminUserName);
-        var (deleted, _) = await new UserService(userManager).DeleteAdminAsync(admin!.Id);
+        var (deleted, _) = await new UserService(userManager).DeleteAsync(admin!.Id);
         deleted.Should().BeTrue();
         return true;
     });

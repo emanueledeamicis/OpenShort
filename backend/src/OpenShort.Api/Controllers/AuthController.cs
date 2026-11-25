@@ -27,7 +27,6 @@ public class AuthController : ControllerBase
     private const string InitialAdminSetupDescription = "Indicates whether the initial admin password setup flow is still required.";
     private const string UnexpectedLoginErrorMessage = "An unexpected error occurred during login.";
     private const string UnexpectedAdminSetupErrorMessage = "An unexpected error occurred during admin setup.";
-    private const string UnexpectedRegistrationErrorMessage = "An unexpected error occurred during registration.";
 
     private readonly UserManager<AppUser> _userManager;
     private readonly ITokenService _tokenService;
@@ -220,43 +219,6 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Unexpected error during initial admin setup.");
             return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedAdminSetupErrorMessage);
-        }
-    }
-
-    [HttpPost("register")]
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = DatabaseInitializer.AdminRoleName)]
-    public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
-    {
-        try
-        {
-            var user = new AppUser { UserName = request.Email, Email = request.Email, CreatedAt = DateTime.UtcNow };
-            var result = await _userManager.CreateAsync(user, request.Password);
-
-            if (!result.Succeeded)
-            {
-                foreach (var error in result.Errors)
-                {
-                    ModelState.AddModelError(error.Code, error.Description);
-                }
-                _logger.LogWarning("Registration failed for {Email}: {Errors}", request.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
-                return ValidationProblem();
-            }
-
-            var roles = await _userManager.GetRolesAsync(user);
-            var token = await _tokenService.CreateTokenAsync(user, roles);
-
-            _logger.LogInformation("User registered: {Email}", request.Email);
-            return Ok(new AuthResponse
-            {
-                Token = token,
-                Email = user.Email,
-                UserName = user.UserName!
-            });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error during registration for {Email}", request.Email);
-            return Problem(statusCode: StatusCodes.Status500InternalServerError, detail: UnexpectedRegistrationErrorMessage);
         }
     }
 

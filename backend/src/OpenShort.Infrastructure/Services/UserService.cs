@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 
@@ -20,9 +21,14 @@ public class UserService : IUserService
         _userManager = userManager;
     }
 
-    public async Task<IEnumerable<AppUser>> GetAllAdminsAsync()
+    // Every user, not the administrators only: a user without the role can sign in as well
+    public async Task<IReadOnlyList<UserAccount>> GetAllAsync()
     {
-        return await _userManager.GetUsersInRoleAsync(DatabaseInitializer.AdminRoleName);
+        var administrators = await _userManager.GetUsersInRoleAsync(DatabaseInitializer.AdminRoleName);
+        var administratorIds = administrators.Select(administrator => administrator.Id).ToHashSet();
+        var users = await _userManager.Users.OrderBy(user => user.CreatedAt).ToListAsync();
+
+        return users.Select(user => new UserAccount(user, administratorIds.Contains(user.Id))).ToList();
     }
 
     public async Task<AppUser?> GetByIdAsync(string id)
@@ -50,7 +56,7 @@ public class UserService : IUserService
         return (null, roleAssignmentResult.Errors);
     }
 
-    public async Task<(bool Success, IEnumerable<IdentityError> Errors)> DeleteAdminAsync(string id)
+    public async Task<(bool Success, IEnumerable<IdentityError> Errors)> DeleteAsync(string id)
     {
         var user = await _userManager.FindByIdAsync(id);
         if (user == null)
@@ -65,21 +71,11 @@ public class UserService : IUserService
             });
         }
 
-        if (!await _userManager.IsInRoleAsync(user, DatabaseInitializer.AdminRoleName))
-        {
-            return (false, new []
-            {
-                new IdentityError
-                {
-                    Code = UserNotFoundErrorCode,
-                    Description = UserNotFoundErrorDescription
-                }
-            });
-        }
-
-        // An administrator without a password cannot sign in, so it does not count as a remaining one
+        // An administrator without a password cannot sign in, so it does not count as a remaining one.
+        // A user without the role never counts: deleting it leaves the administrators as they are
         var remainingAdmins = await AdminAccounts.GetAbleToSignInAsync(_userManager);
-        if (remainingAdmins.All(admin => admin.Id == user.Id))
+        if (await _userManager.IsInRoleAsync(user, DatabaseInitializer.AdminRoleName)
+            && remainingAdmins.All(admin => admin.Id == user.Id))
         {
             return (false, new []
             {
@@ -99,7 +95,7 @@ public class UserService : IUserService
     public async Task<(bool Success, IEnumerable<IdentityError> Errors)> DisableTwoFactorAsync(string id)
     {
         var user = await _userManager.FindByIdAsync(id);
-        if (user == null || !await _userManager.IsInRoleAsync(user, DatabaseInitializer.AdminRoleName))
+        if (user == null)
         {
             return (false, new []
             {

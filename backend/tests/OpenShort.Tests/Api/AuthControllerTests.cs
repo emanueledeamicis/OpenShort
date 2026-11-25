@@ -122,16 +122,13 @@ public class AuthControllerTests
             Times.Once);
     }
 
+    // It created users without the Admin role, that the Users page did not show
     [Test]
-    public void Register_ShouldRequireAdminJwtAuthentication()
+    public void Register_ShouldNotExist()
     {
-        var method = typeof(AuthController).GetMethod(nameof(AuthController.Register));
-
-        var attribute = method!.GetCustomAttributes(typeof(AuthorizeAttribute), inherit: true)
-            .Cast<AuthorizeAttribute>()
-            .Single();
-
-        attribute.AuthenticationSchemes.Should().Be(JwtBearerDefaults.AuthenticationScheme);
-        attribute.Roles.Should().Be(DatabaseInitializer.AdminRoleName);
+        typeof(AuthController).GetMethods()
+            .SelectMany(method => method.GetCustomAttributes(typeof(Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute), inherit: true).Cast<Microsoft.AspNetCore.Mvc.Routing.HttpMethodAttribute>())
+            .Select(attribute => attribute.Template)
+            .Should().NotContain("register");
     }
 }

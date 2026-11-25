@@ -56,7 +56,7 @@ public class UserServiceTests
         await CreateAdminAsync("second@example.com", Password);
 
         // Act
-        var (success, _) = await _userService.DeleteAdminAsync(first.Id);
+        var (success, _) = await _userService.DeleteAsync(first.Id);
 
         // Assert
         success.Should().BeTrue();
@@ -70,7 +70,7 @@ public class UserServiceTests
         var only = await CreateAdminAsync("only@example.com", Password);
 
         // Act
-        var (success, errors) = await _userService.DeleteAdminAsync(only.Id);
+        var (success, errors) = await _userService.DeleteAsync(only.Id);
 
         // Assert
         success.Should().BeFalse();
@@ -86,7 +86,7 @@ public class UserServiceTests
         await CreateAdminAsync(DatabaseInitializer.AdminUserName, password: null);
 
         // Act
-        var (success, errors) = await _userService.DeleteAdminAsync(usable.Id);
+        var (success, errors) = await _userService.DeleteAsync(usable.Id);
 
         // Assert
         success.Should().BeFalse();
@@ -102,7 +102,7 @@ public class UserServiceTests
         var withoutPassword = await CreateAdminAsync(DatabaseInitializer.AdminUserName, password: null);
 
         // Act
-        var (success, _) = await _userService.DeleteAdminAsync(withoutPassword.Id);
+        var (success, _) = await _userService.DeleteAsync(withoutPassword.Id);
 
         // Assert
         success.Should().BeTrue();
@@ -117,7 +117,7 @@ public class UserServiceTests
         await CreateAdminAsync("second@example.com", password: null);
 
         // Act
-        var (success, errors) = await _userService.DeleteAdminAsync(first.Id);
+        var (success, errors) = await _userService.DeleteAsync(first.Id);
 
         // Assert
         success.Should().BeFalse();
@@ -186,21 +186,74 @@ public class UserServiceTests
         errors.Should().ContainSingle(error => error.Code == "NotFound");
     }
 
+    // A user without the Admin role, as the removed register endpoint left them, is managed like the others
     [Test]
-    public async Task DisableTwoFactor_ShouldFail_WhenTheUserIsNotAnAdministrator()
+    public async Task DisableTwoFactor_ShouldTurnItOff_ForAUserWithoutTheAdminRole()
     {
-        // Arrange: the users endpoints manage administrators only
-        var user = new AppUser { UserName = "plain@example.com", CreatedAt = DateTime.UtcNow };
-        (await _userManager.CreateAsync(user, Password)).Succeeded.Should().BeTrue();
+        // Arrange
+        var user = await CreateUserWithoutRoleAsync("plain@example.com");
         await EnableTwoFactorAsync(user);
 
         // Act
-        var (success, errors) = await _userService.DisableTwoFactorAsync(user.Id);
+        var (success, _) = await _userService.DisableTwoFactorAsync(user.Id);
+
+        // Assert
+        success.Should().BeTrue();
+        (await _userManager.GetTwoFactorEnabledAsync(user)).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task GetAll_ShouldListTheUsersWithoutTheAdminRoleToo()
+    {
+        // Arrange
+        var admin = await CreateAdminAsync("admin@example.com", Password);
+        var plain = await CreateUserWithoutRoleAsync("plain@example.com");
+
+        // Act
+        var accounts = await _userService.GetAllAsync();
+
+        // Assert
+        accounts.Should().HaveCount(2);
+        accounts.Single(account => account.User.Id == admin.Id).IsAdmin.Should().BeTrue();
+        accounts.Single(account => account.User.Id == plain.Id).IsAdmin.Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Delete_ShouldSucceed_ForAUserWithoutTheAdminRole()
+    {
+        // Arrange
+        await CreateAdminAsync("admin@example.com", Password);
+        var plain = await CreateUserWithoutRoleAsync("plain@example.com");
+
+        // Act
+        var (success, _) = await _userService.DeleteAsync(plain.Id);
+
+        // Assert
+        success.Should().BeTrue();
+        (await _userManager.FindByIdAsync(plain.Id)).Should().BeNull();
+    }
+
+    // The last administrator is the one that cannot be deleted, whoever else can sign in
+    [Test]
+    public async Task Delete_ShouldFail_ForTheOnlyAdmin_WhenAUserWithoutTheRoleCanSignIn()
+    {
+        // Arrange
+        var only = await CreateAdminAsync("admin@example.com", Password);
+        await CreateUserWithoutRoleAsync("plain@example.com");
+
+        // Act
+        var (success, errors) = await _userService.DeleteAsync(only.Id);
 
         // Assert
         success.Should().BeFalse();
-        errors.Should().ContainSingle(error => error.Code == "NotFound");
-        (await _userManager.GetTwoFactorEnabledAsync(user)).Should().BeTrue();
+        errors.Should().ContainSingle(error => error.Code == LastAdminDeletionForbiddenErrorCode);
+    }
+
+    private async Task<AppUser> CreateUserWithoutRoleAsync(string userName)
+    {
+        var user = new AppUser { UserName = userName, CreatedAt = DateTime.UtcNow };
+        (await _userManager.CreateAsync(user, Password)).Succeeded.Should().BeTrue();
+        return user;
     }
 
     private async Task EnableTwoFactorAsync(AppUser user)

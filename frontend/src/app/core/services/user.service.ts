@@ -8,6 +8,8 @@ export interface AdminUser {
     email: string | null;
     createdAt: string;
     twoFactorEnabled: boolean;
+    // False for a user left without the Admin role by an earlier version
+    isAdmin: boolean;
 }
 
 export interface CreateAdminUserRequest {

@@ -27,9 +27,9 @@ import { UserService, AdminUser } from '../../core/services/user.service';
     templateUrl: './users.html'
 })
 export class UsersComponent implements OnInit, OnDestroy {
-    private static readonly loadUsersErrorMessage = 'Unable to load admin users.';
+    private static readonly loadUsersErrorMessage = 'Unable to load users.';
     private static readonly createUserErrorMessage = 'Failed to create admin user. Please try again.';
-    private static readonly deleteUserErrorMessage = 'Failed to delete admin user. Please try again.';
+    private static readonly deleteUserErrorMessage = 'Failed to delete user. Please try again.';
     private static readonly disableTwoFactorErrorMessage = 'Failed to turn off two-factor authentication. Please try again.';
 
     users: AdminUser[] = [];
@@ -176,7 +176,7 @@ export class UsersComponent implements OnInit, OnDestroy {
                 this.deleting = false;
                 this.showDeleteConfirm = false;
                 this.selectedUser = null;
-                this.successMessage = 'Admin user deleted successfully.';
+                this.successMessage = 'User deleted successfully.';
                 this.loadUsers();
             },
             error: (err) => {
@@ -248,6 +248,11 @@ export class UsersComponent implements OnInit, OnDestroy {
         }
 
         return apiError?.message || apiError?.detail || apiError?.title || fallbackMessage;
+    }
+
+    // The explanation above the table is shown only when there is someone it is about
+    get hasNonAdminUsers(): boolean {
+        return this.users.some((user) => !user.isAdmin);
     }
 
     isCurrentUser(user: AdminUser): boolean {

@@ -262,9 +262,11 @@ export class LinksListComponent implements OnInit, OnDestroy {
     }
 
     confirmDelete() {
-        if (!this.selectedLink) return;
+        // A second click while the request is running must not send it again
+        if (!this.selectedLink || this.saving) return;
 
         this.saving = true;
+        this.cdr.detectChanges();
         const sub = this.linkService.delete(this.selectedLink.id).subscribe({
             next: () => {
                 this.saving = false;
@@ -292,9 +294,11 @@ export class LinksListComponent implements OnInit, OnDestroy {
     }
 
     confirmToggle() {
-        if (!this.selectedLink) return;
+        // A second click while the request is running must not send it again
+        if (!this.selectedLink || this.saving) return;
 
         this.saving = true;
+        this.cdr.detectChanges();
         const dto: UpdateLinkDto = {
             destinationUrl: this.selectedLink.destinationUrl,
             redirectType: this.selectedLink.redirectType,

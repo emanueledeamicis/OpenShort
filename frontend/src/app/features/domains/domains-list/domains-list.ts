@@ -227,9 +227,11 @@ export class DomainsListComponent implements OnInit, OnDestroy {
 
     // Delete - Execute
     confirmDelete() {
-        if (!this.selectedDomain) return;
+        // A second click while the request is running must not send it again
+        if (!this.selectedDomain || this.deleting) return;
 
         this.deleting = true;
+        this.cdr.detectChanges();
         const sub = this.domainService.delete(this.selectedDomain.id).subscribe({
             next: () => {
                 this.deleting = false;

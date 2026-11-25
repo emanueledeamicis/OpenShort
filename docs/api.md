@@ -117,6 +117,7 @@ Field notes:
 - `redirectType: 301` means permanent redirect
 - `redirectType: 302` means temporary redirect
 - `isActive` controls whether the short link can be resolved publicly
+- a link that is not active or has expired, and every link of a domain that is not active, answers like a link that does not exist: the 404 page, or the custom URL set for the domain
 
 ### Update Link
 

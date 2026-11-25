@@ -34,13 +34,13 @@ public class LinksControllerTests
         _context = new AppDbContext(options);
         _mockSlugGenerator = new Mock<ISlugGenerator>();
         _mockLogger = new Mock<ILogger<LinksController>>();
-        _domainService = new DomainService(_context);
-        
-        var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var redirectCache = new RedirectCache(new MemoryCache(new MemoryCacheOptions()));
+        _domainService = new DomainService(_context, redirectCache);
+
         var mockSettingService = new Mock<ISettingService>();
         var channel = Channel.CreateUnbounded<ClickEvent>();
         var mockLinkLogger = new Mock<ILogger<LinkService>>();
-        _linkService = new LinkService(_context, _mockSlugGenerator.Object, memoryCache, mockSettingService.Object, channel.Writer, mockLinkLogger.Object);
+        _linkService = new LinkService(_context, _mockSlugGenerator.Object, redirectCache, mockSettingService.Object, channel.Writer, mockLinkLogger.Object);
 
         // Seed default domain for existing tests
         _context.Domains.Add(new Domain { Host = "localhost", IsActive = true });

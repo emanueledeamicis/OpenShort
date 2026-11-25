@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Moq;
 using NUnit.Framework;
@@ -28,7 +29,7 @@ public class DomainsControllerTests
 
         _context = new AppDbContext(options);
         _loggerMock = new Mock<ILogger<DomainsController>>();
-        _domainService = new DomainService(_context);
+        _domainService = new DomainService(_context, new RedirectCache(new MemoryCache(new MemoryCacheOptions())));
         _controller = new DomainsController(_domainService, _loggerMock.Object);
     }
 

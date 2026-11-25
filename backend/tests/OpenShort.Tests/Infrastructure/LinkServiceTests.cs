@@ -31,7 +31,7 @@ public class LinkServiceTests
         var mockSettingService = new Mock<ISettingService>();
         var channel = Channel.CreateUnbounded<ClickEvent>();
         var mockLogger = new Mock<ILogger<LinkService>>();
-        _linkService = new LinkService(_context, _mockSlugGenerator.Object, memoryCache, mockSettingService.Object, channel.Writer, mockLogger.Object);
+        _linkService = new LinkService(_context, _mockSlugGenerator.Object, new RedirectCache(memoryCache), mockSettingService.Object, channel.Writer, mockLogger.Object);
 
         // Seed default domain
         _context.Domains.Add(new Domain { Host = "test.com", IsActive = true });

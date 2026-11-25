@@ -8,10 +8,12 @@ namespace OpenShort.Infrastructure.Services;
 public class DomainService : IDomainService
 {
     private readonly AppDbContext _context;
+    private readonly RedirectCache _redirectCache;
 
-    public DomainService(AppDbContext context)
+    public DomainService(AppDbContext context, RedirectCache redirectCache)
     {
         _context = context;
+        _redirectCache = redirectCache;
     }
 
     public async Task<IEnumerable<Domain>> GetAllAsync()
@@ -48,6 +50,13 @@ public class DomainService : IDomainService
         try
         {
             await _context.SaveChangesAsync();
+
+            // The links of a domain turned off must stop at once, not when their cache entry expires
+            if (!domain.IsActive)
+            {
+                _redirectCache.Clear();
+            }
+
             return true;
         }
         catch (DbUpdateConcurrencyException)
@@ -73,6 +82,10 @@ public class DomainService : IDomainService
 
         _context.Domains.Remove(domain);
         await _context.SaveChangesAsync();
+
+        // The deleted links must stop at once, not when their cache entry expires
+        _redirectCache.Clear();
+
         return true;
     }
 

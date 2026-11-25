@@ -65,6 +65,7 @@ builder.Services.Configure<GitHubUpdateOptions>(builder.Configuration.GetSection
 
 // Caching Configuration
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<RedirectCache>();
 builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<ISlugGenerator, SlugGenerator>();

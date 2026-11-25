@@ -93,7 +93,7 @@ public class DatabaseInitializer
         {
             await _jwtKeyProvider.GetOrGenerateKeyAsync();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidJwtKeyException)
         {
             _logger.LogWarning(ex, JwtKeyBootstrapWarningMessage);
         }

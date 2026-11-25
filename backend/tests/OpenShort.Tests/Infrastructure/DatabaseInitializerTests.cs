@@ -24,6 +24,8 @@ public class DatabaseInitializerTests
 {
     private const string ResetVariable = "ADMIN_PASSWORD_RESET";
     private const string TwoFactorResetVariable = "ADMIN_2FA_RESET";
+    private const string JwtKeyVariable = "JWT_SECRET_KEY";
+    private const string JwtKeySetting = "JwtSecretKey";
     private const string CurrentPassword = "CurrentPass123!";
     private const string NewPassword = "Temporary-Passw0rd";
     private const string OtherAdminEmail = "owner@example.com";
@@ -57,6 +59,21 @@ public class DatabaseInitializerTests
         // Assert
         (await IsSetupRequiredAsync()).Should().BeTrue();
         (await AdminHasPasswordAsync()).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task Initialize_ShouldStopAndKeepTheStoredKey_WhenJwtSecretKeyIsTooShort()
+    {
+        // Arrange
+        var validKey = new string('k', JwtKeyProvider.MinimumKeyBytes);
+        await StartAsync(resetPassword: null, jwtSecretKey: validKey);
+
+        // Act
+        var start = () => StartAsync(resetPassword: null, jwtSecretKey: "too-short");
+
+        // Assert
+        (await start.Should().ThrowAsync<InvalidJwtKeyException>()).WithMessage($"*{JwtKeyVariable}*{JwtKeyProvider.MinimumKeyBytes}*");
+        (await GetSettingAsync(JwtKeySetting)).Should().Be(validKey);
     }
 
     [Test]
@@ -720,15 +737,19 @@ public class DatabaseInitializerTests
         string? resetPassword,
         bool failUserSave = false,
         string? twoFactorReset = null,
-        int userSavesBeforeFailure = 0)
+        int userSavesBeforeFailure = 0,
+        string? jwtSecretKey = null)
     {
-        await using var provider = BuildProvider(resetPassword, failUserSave || userSavesBeforeFailure > 0, twoFactorReset, userSavesBeforeFailure);
+        await using var provider = BuildProvider(resetPassword, failUserSave || userSavesBeforeFailure > 0, twoFactorReset, userSavesBeforeFailure, jwtSecretKey);
         using var scope = provider.CreateScope();
         await scope.ServiceProvider.GetRequiredService<DatabaseInitializer>().InitializeAsync();
     }
 
     private Task<bool> IsSetupRequiredAsync() => WithScopeAsync(services =>
         services.GetRequiredService<ISettingService>().GetSettingAsync(DatabaseInitializer.InitialAdminSetupRequiredKey, true));
+
+    private Task<string?> GetSettingAsync(string key) => WithScopeAsync(services =>
+        services.GetRequiredService<ISettingService>().GetSettingAsync(key));
 
     private Task<bool> AdminHasPasswordAsync() => WithAdminAsync((userManager, admin) => userManager.HasPasswordAsync(admin));
 
@@ -758,13 +779,15 @@ public class DatabaseInitializerTests
         string? resetPassword,
         bool failUserSave = false,
         string? twoFactorReset = null,
-        int userSavesBeforeFailure = 0)
+        int userSavesBeforeFailure = 0,
+        string? jwtSecretKey = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 [ResetVariable] = resetPassword,
-                [TwoFactorResetVariable] = twoFactorReset
+                [TwoFactorResetVariable] = twoFactorReset,
+                [JwtKeyVariable] = jwtSecretKey
             })
             .Build();
 
@@ -781,7 +804,17 @@ public class DatabaseInitializerTests
         }
 
         services.AddScoped<ISettingService, SettingService>();
-        services.AddSingleton(new Mock<IJwtKeyProvider>().Object);
+        // The real provider only when the test gives a key: the other tests do not look at it
+        if (jwtSecretKey == null)
+        {
+            services.AddSingleton(new Mock<IJwtKeyProvider>().Object);
+        }
+        else
+        {
+            services.AddMemoryCache();
+            services.AddScoped<IJwtKeyProvider, JwtKeyProvider>();
+        }
+
         services.AddScoped<DatabaseInitializer>();
         return services.BuildServiceProvider();
     }

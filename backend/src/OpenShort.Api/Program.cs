@@ -145,6 +145,9 @@ var trustedProxies = OpenShort.Api.Auth.TrustedProxies.Parse(
     builder.Configuration[OpenShort.Api.Auth.TrustedProxies.ConfigurationKey]);
 builder.Services.Configure<ForwardedHeadersOptions>(trustedProxies.Configure);
 
+// Same for a JWT key that is too short to sign a token: checked before the database is touched
+JwtKeyProvider.ReadConfiguredKey(builder.Configuration);
+
 builder.Services.AddIdentityCore<AppUser>(OpenShort.Api.Auth.AuthProtection.ConfigureIdentity)
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<AppDbContext>()

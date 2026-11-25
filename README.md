@@ -413,6 +413,8 @@ environment:
 
 If you provide the key this way, OpenShort always prioritizes it over the one stored in SQLite or MySQL.
 
+The key must be at least 32 characters long. With a shorter one OpenShort does not start, and the log says why.
+
 **Rotating the key.** Start OpenShort once with `JWT_SECRET_KEY` set to a new random value of at least 32 characters. Sessions opened before are no longer accepted, so everyone has to sign in again. The new key is saved in the database, so you can remove the variable afterwards.
 
 ## Custom Domain Setup

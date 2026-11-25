@@ -75,6 +75,31 @@ public class JwtKeyProviderTests
         (await act.Should().ThrowAsync<InvalidJwtKeyException>()).Which.Message.Should().NotContain(secret);
     }
 
+    [Test]
+    public void ReadConfiguredKey_ShouldThrow_WhenTheConfiguredKeyIsTooShort()
+    {
+        var act = () => JwtKeyProvider.ReadConfiguredKey(BuildConfiguration(("JWT_SECRET_KEY", ShortKey)));
+
+        act.Should().Throw<InvalidJwtKeyException>().WithMessage("JWT_SECRET_KEY is too short*");
+    }
+
+    [Test]
+    public void ReadConfiguredKey_ShouldReturnNull_WhenNothingIsConfigured()
+    {
+        JwtKeyProvider.ReadConfiguredKey(BuildConfiguration()).Should().BeNull();
+    }
+
+    // As before the check: an empty JWT_SECRET_KEY hides Jwt:Key, and the stored key is used
+    [Test]
+    public async Task GetOrGenerateKey_ShouldUseTheStoredKey_WhenJwtSecretKeyIsEmptyAndJwtKeyIsSet()
+    {
+        _storedKey = ValidKey;
+
+        var key = await CreateProvider(("JWT_SECRET_KEY", ""), ("Jwt:Key", new string('j', 64))).GetOrGenerateKeyAsync();
+
+        key.Should().Be(ValidKey);
+    }
+
     // The limit is in bytes, as the signature counts them
     [Test]
     public async Task GetOrGenerateKey_ShouldCountBytes_WhenTheConfiguredKeyHasNonAsciiCharacters()
@@ -121,10 +146,13 @@ public class JwtKeyProviderTests
 
     private JwtKeyProvider CreateProvider(params (string Name, string Value)[] configuration)
     {
-        var config = new ConfigurationBuilder()
+        return new JwtKeyProvider(_settingService.Object, BuildConfiguration(configuration), new Mock<ILogger<JwtKeyProvider>>().Object, _cache);
+    }
+
+    private static IConfiguration BuildConfiguration(params (string Name, string Value)[] configuration)
+    {
+        return new ConfigurationBuilder()
             .AddInMemoryCollection(configuration.ToDictionary(item => item.Name, item => (string?)item.Value))
             .Build();
-
-        return new JwtKeyProvider(_settingService.Object, config, new Mock<ILogger<JwtKeyProvider>>().Object, _cache);
     }
 }

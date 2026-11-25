@@ -26,7 +26,8 @@ public class JwtKeyProvider : IJwtKeyProvider
     // HS256 does not sign with a shorter key: the login would answer with an error
     public const int MinimumKeyBytes = 32;
 
-    private static readonly string[] ConfigurationKeys = ["JWT_SECRET_KEY", "Jwt:Key"];
+    private const string EnvironmentKeyName = "JWT_SECRET_KEY";
+    private const string SectionKeyName = "Jwt:Key";
     private const string CacheKey = "JwtSecretKey_Cache";
     private const string JwtSecretKeySettingKey = "JwtSecretKey";
     private const string JwtSecretKeyFromConfigDescription = "JWT Secret Key (From Env/Args)";
@@ -36,7 +37,7 @@ public class JwtKeyProvider : IJwtKeyProvider
     private const string JwtKeyGeneratingMessage = "No JWT Key found. Generating a new secure random key...";
     private const string JwtKeyGeneratedMessage = "New JWT Key generated and saved to Database.";
     private const string JwtKeyTooShortInConfigurationMessage = "{0} is too short: it is {1} bytes long and it must be at least {2}. The key was not saved and OpenShort does not start. Set a random value of at least {2} characters, or remove {0} to use the key stored in the database.";
-    private const string JwtKeyTooShortInDatabaseMessage = "The JWT Key stored in the database is too short to sign a token ({Length} bytes, at least {Minimum} needed): no session could be opened with it. It is replaced with a new random key.";
+    private const string JwtKeyTooShortInDatabaseMessage = "The JWT Key stored in the database is too short to sign a token ({Length} bytes, at least {Minimum} needed): no session could be opened with it. It was replaced with a new random key.";
 
     private readonly ISettingService _settingService;
     private readonly IConfiguration _configuration;
@@ -51,6 +52,26 @@ public class JwtKeyProvider : IJwtKeyProvider
         _cache = cache;
     }
 
+    // The key given in the configuration, or null when there is none. Throws when it is too short to sign
+    // a token: Program.cs calls it before anything else happens, so that such a key stops the startup
+    public static string? ReadConfiguredKey(IConfiguration configuration)
+    {
+        var name = configuration[EnvironmentKeyName] != null ? EnvironmentKeyName : SectionKeyName;
+        var key = configuration[name];
+        if (string.IsNullOrEmpty(key))
+        {
+            return null;
+        }
+
+        var keyBytes = Encoding.UTF8.GetByteCount(key);
+        if (keyBytes < MinimumKeyBytes)
+        {
+            throw new InvalidJwtKeyException(string.Format(JwtKeyTooShortInConfigurationMessage, name, keyBytes, MinimumKeyBytes));
+        }
+
+        return key;
+    }
+
     public async Task<string> GetOrGenerateKeyAsync()
     {
         // 0. Check Memory Cache
@@ -60,17 +81,10 @@ public class JwtKeyProvider : IJwtKeyProvider
         }
 
         // 1. Check Configuration (Environment Variable or Command Line)
-        var configKeyName = ConfigurationKeys.FirstOrDefault(name => !string.IsNullOrEmpty(_configuration[name]));
-        var configKey = configKeyName == null ? null : _configuration[configKeyName];
+        var configKey = ReadConfiguredKey(_configuration);
 
         if (!string.IsNullOrEmpty(configKey))
         {
-            var configKeyBytes = Encoding.UTF8.GetByteCount(configKey);
-            if (configKeyBytes < MinimumKeyBytes)
-            {
-                throw new InvalidJwtKeyException(string.Format(JwtKeyTooShortInConfigurationMessage, configKeyName, configKeyBytes, MinimumKeyBytes));
-            }
-
             _logger.LogInformation(JwtKeyFoundInConfigurationMessage);
             
             // Optionally update DB to stay consistent
@@ -86,9 +100,15 @@ public class JwtKeyProvider : IJwtKeyProvider
         var dbKeyBytes = string.IsNullOrEmpty(dbKey) ? 0 : Encoding.UTF8.GetByteCount(dbKey);
         if (dbKeyBytes > 0 && dbKeyBytes < MinimumKeyBytes)
         {
+            var replacementKey = GenerateSecureKey();
+            await _settingService.SetSettingAsync(JwtSecretKeySettingKey, replacementKey, JwtSecretKeyGeneratedDescription);
             _logger.LogWarning(JwtKeyTooShortInDatabaseMessage, dbKeyBytes, MinimumKeyBytes);
+
+            _cache.Set(CacheKey, replacementKey);
+            return replacementKey;
         }
-        else if (!string.IsNullOrEmpty(dbKey))
+
+        if (!string.IsNullOrEmpty(dbKey))
         {
             _logger.LogInformation(JwtKeyFoundInDatabaseMessage);
             

@@ -245,9 +245,13 @@ export class TwoFactorComponent implements OnInit, OnDestroy {
 
     // Runs a call that needed the password or the code, which are forgotten when it succeeds
     private run<T>(call: Observable<T>, onSuccess: (result: T) => void) {
+        // A second click while the request is running must not send it again
+        if (this.isBusy) return;
+
         this.isBusy = true;
         this.errorMessage = null;
         this.successMessage = null;
+        this.cdr.detectChanges();
 
         this.subscription.add(call.subscribe({
             next: (result) => {

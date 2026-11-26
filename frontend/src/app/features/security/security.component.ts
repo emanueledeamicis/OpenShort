@@ -68,9 +68,13 @@ export class SecurityComponent implements OnInit {
     }
 
     generateApiKey() {
+        // A second click while the request is running must not send it again
+        if (this.isGeneratingApiKey) return;
+
         this.showConfirmRegenerate = false;
         this.isGeneratingApiKey = true;
         this.generatedKey = null;
+        this.cdr.detectChanges();
 
         this.securityService.generateApiKey().subscribe({
             next: (result) => {
@@ -107,7 +111,8 @@ export class SecurityComponent implements OnInit {
     }
 
     changePassword() {
-        if (this.passwordForm.invalid) return;
+        // A second click while the request is running must not send it again
+        if (this.passwordForm.invalid || this.isChangingPassword) return;
 
         const formValue = this.passwordForm.value;
         if (formValue.newPassword !== formValue.confirmPassword) {
@@ -118,6 +123,7 @@ export class SecurityComponent implements OnInit {
         this.isChangingPassword = true;
         this.passwordMessage = null;
         this.passwordError = null;
+        this.cdr.detectChanges();
 
         this.securityService.changePassword({
             currentPassword: formValue.currentPassword,

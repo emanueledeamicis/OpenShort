@@ -9,6 +9,7 @@ import { MessageModule } from 'primeng/message';
 import { CheckboxModule } from 'primeng/checkbox';
 import { SelectModule } from 'primeng/select';
 import { TooltipModule } from 'primeng/tooltip';
+import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { LinkService } from '../../../core/services/link.service';
 import { DomainService } from '../../../core/services/domain.service';
@@ -27,7 +28,8 @@ import { Link, Domain, RedirectType, UpdateLinkDto } from '../../../core/models/
         MessageModule,
         CheckboxModule,
         SelectModule,
-        TooltipModule
+        TooltipModule,
+        RouterLink
     ],
     templateUrl: './links-list.html',
     styleUrl: './links-list.css'
@@ -43,6 +45,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
 
     links: Link[] = [];
     domains: Domain[] = [];
+    // The ones a new link can be created on: the API refuses a domain that is turned off
+    activeDomains: Domain[] = [];
     loading = false;
     showDialog = false;
     showEditDialog = false;
@@ -122,6 +126,7 @@ export class LinksListComponent implements OnInit, OnDestroy {
             next: (data) => {
                 // Sort by ID descending (newest first)
                 this.domains = data.sort((a, b) => b.id - a.id);
+                this.activeDomains = this.domains.filter((domain) => domain.isActive);
                 this.cdr.detectChanges();
             },
             error: (err) => {
@@ -134,8 +139,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
 
     // Create Dialog
     openCreateDialog() {
-        // Reset form and pre-select the last created domain
-        const defaultDomain = this.domains.length > 0 ? this.domains[0].host : '';
+        // Reset form and pre-select the last created domain that is active
+        const defaultDomain = this.activeDomains.length > 0 ? this.activeDomains[0].host : '';
         this.linkForm.reset({
             isActive: true,
             domain: defaultDomain,

@@ -47,6 +47,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
     domains: Domain[] = [];
     // The ones a new link can be created on: the API refuses a domain that is turned off
     activeDomains: Domain[] = [];
+    // False until the domains have arrived once: an empty list then means that there are none
+    domainsLoaded = false;
     loading = false;
     showDialog = false;
     showEditDialog = false;
@@ -127,28 +129,51 @@ export class LinksListComponent implements OnInit, OnDestroy {
                 // Sort by ID descending (newest first)
                 this.domains = data.sort((a, b) => b.id - a.id);
                 this.activeDomains = this.domains.filter((domain) => domain.isActive);
+                this.domainsLoaded = true;
+                this.selectDefaultDomain();
                 this.cdr.detectChanges();
             },
             error: (err) => {
-                this.pageErrorMessage = this.extractApiErrorMessage(err, LinksListComponent.loadDomainsErrorMessage);
+                // In the form when it is open: the page is behind it
+                const message = this.extractApiErrorMessage(err, LinksListComponent.loadDomainsErrorMessage);
+                if (this.showDialog) {
+                    this.errorMessage = message;
+                } else {
+                    this.pageErrorMessage = message;
+                }
                 this.cdr.detectChanges();
             }
         });
         this.subscription.add(sub);
     }
 
+    // In the form of a new link, selects the last created domain that is active, unless the one
+    // already chosen still is. The domains may arrive, or change, while the form is open
+    private selectDefaultDomain() {
+        if (!this.showDialog) {
+            return;
+        }
+
+        const selected = this.linkForm.get('domain')?.value;
+        if (!this.activeDomains.some((domain) => domain.host === selected)) {
+            this.linkForm.patchValue({ domain: this.activeDomains.length > 0 ? this.activeDomains[0].host : '' });
+        }
+    }
+
     // Create Dialog
     openCreateDialog() {
-        // Reset form and pre-select the last created domain that is active
-        const defaultDomain = this.activeDomains.length > 0 ? this.activeDomains[0].host : '';
         this.linkForm.reset({
             isActive: true,
-            domain: defaultDomain,
+            domain: '',
             redirectType: RedirectType.Permanent
         });
         this.errorMessage = '';
         this.pageErrorMessage = '';
         this.showDialog = true;
+        this.selectDefaultDomain();
+
+        // A domain may have been turned on or off since the page was opened
+        this.loadDomains();
     }
 
     closeDialog() {

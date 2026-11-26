@@ -82,16 +82,20 @@
                 </small>
             </div>
 
-            <div class="flex flex-col gap-2">
+            <!-- A long host name must not widen the dialog: the field takes the width it is given, the name is
+                 cut in the field and wraps in the list -->
+            <div class="flex flex-col gap-2 min-w-0 [contain:inline-size]">
                 <label for="domain" class="font-medium">Domain *</label>
                 <p-select inputId="domain" formControlName="domain" [options]="activeDomains" optionLabel="host"
-                    optionValue="host" placeholder="Select a domain" styleClass="w-full" appendTo="body"
-                    [disabled]="saving" />
+                    optionValue="host" placeholder="Select a domain" styleClass="w-full"
+                    panelStyleClass="w-full [&_.p-select-option]:whitespace-normal [&_.p-select-option]:break-all"
+                    [attr.title]="linkForm.get('domain')?.value || null"
+                    [disabled]="saving || activeDomains.length === 0" />
                 <!-- Without an active domain the form cannot be sent: say why, and where to go -->
-                <small class="text-red-500" *ngIf="activeDomains.length === 0">
-                    No active domain. Add a domain, or turn one on, in the
-                    <a routerLink="/domains" class="underline">Domains</a> page.
-                </small>
+                <p-message *ngIf="domainsLoaded && activeDomains.length === 0" severity="warn">
+                    <span>No active domain. Add a domain, or turn one on, in the
+                        <a routerLink="/domains" class="underline">Domains</a> page.</span>
+                </p-message>
                 <small class="text-red-500"
                     *ngIf="activeDomains.length > 0 && linkForm.get('domain')?.invalid && linkForm.get('domain')?.touched">
                     Domain is required

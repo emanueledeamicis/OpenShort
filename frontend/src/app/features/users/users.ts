@@ -162,7 +162,8 @@ export class UsersComponent implements OnInit, OnDestroy {
     }
 
     confirmDelete() {
-        if (!this.selectedUser) {
+        // A second click while the request is running must not send it again
+        if (!this.selectedUser || this.deleting) {
             return;
         }
 
@@ -202,7 +203,8 @@ export class UsersComponent implements OnInit, OnDestroy {
     }
 
     confirmDisableTwoFactor() {
-        if (!this.selectedUser) {
+        // A second click while the request is running must not send it again
+        if (!this.selectedUser || this.disablingTwoFactor) {
             return;
         }
 

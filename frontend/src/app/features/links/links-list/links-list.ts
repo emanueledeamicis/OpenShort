@@ -9,6 +9,7 @@ import { MessageModule } from 'primeng/message';
 import { CheckboxModule } from 'primeng/checkbox';
 import { SelectModule } from 'primeng/select';
 import { TooltipModule } from 'primeng/tooltip';
+import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { LinkService } from '../../../core/services/link.service';
 import { DomainService } from '../../../core/services/domain.service';
@@ -27,7 +28,8 @@ import { Link, Domain, RedirectType, UpdateLinkDto } from '../../../core/models/
         MessageModule,
         CheckboxModule,
         SelectModule,
-        TooltipModule
+        TooltipModule,
+        RouterLink
     ],
     templateUrl: './links-list.html',
     styleUrl: './links-list.css'
@@ -43,6 +45,10 @@ export class LinksListComponent implements OnInit, OnDestroy {
 
     links: Link[] = [];
     domains: Domain[] = [];
+    // The ones a new link can be created on: the API refuses a domain that is turned off
+    activeDomains: Domain[] = [];
+    // False until the domains have arrived once: an empty list then means that there are none
+    domainsLoaded = false;
     loading = false;
     showDialog = false;
     showEditDialog = false;
@@ -122,28 +128,52 @@ export class LinksListComponent implements OnInit, OnDestroy {
             next: (data) => {
                 // Sort by ID descending (newest first)
                 this.domains = data.sort((a, b) => b.id - a.id);
+                this.activeDomains = this.domains.filter((domain) => domain.isActive);
+                this.domainsLoaded = true;
+                this.selectDefaultDomain();
                 this.cdr.detectChanges();
             },
             error: (err) => {
-                this.pageErrorMessage = this.extractApiErrorMessage(err, LinksListComponent.loadDomainsErrorMessage);
+                // In the form when it is open: the page is behind it
+                const message = this.extractApiErrorMessage(err, LinksListComponent.loadDomainsErrorMessage);
+                if (this.showDialog) {
+                    this.errorMessage = message;
+                } else {
+                    this.pageErrorMessage = message;
+                }
                 this.cdr.detectChanges();
             }
         });
         this.subscription.add(sub);
     }
 
+    // In the form of a new link, selects the last created domain that is active, unless the one
+    // already chosen still is. The domains may arrive, or change, while the form is open
+    private selectDefaultDomain() {
+        if (!this.showDialog) {
+            return;
+        }
+
+        const selected = this.linkForm.get('domain')?.value;
+        if (!this.activeDomains.some((domain) => domain.host === selected)) {
+            this.linkForm.patchValue({ domain: this.activeDomains.length > 0 ? this.activeDomains[0].host : '' });
+        }
+    }
+
     // Create Dialog
     openCreateDialog() {
-        // Reset form and pre-select the last created domain
-        const defaultDomain = this.domains.length > 0 ? this.domains[0].host : '';
         this.linkForm.reset({
             isActive: true,
-            domain: defaultDomain,
+            domain: '',
             redirectType: RedirectType.Permanent
         });
         this.errorMessage = '';
         this.pageErrorMessage = '';
         this.showDialog = true;
+        this.selectDefaultDomain();
+
+        // A domain may have been turned on or off since the page was opened
+        this.loadDomains();
     }
 
     closeDialog() {

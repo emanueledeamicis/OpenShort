@@ -40,6 +40,7 @@ export class DomainsListComponent implements OnInit, OnDestroy {
     showSettingsDialog = false;
     showDeleteConfirm = false;
     showFinalConfirm = false;
+    showDeactivateConfirm = false;
     saving = false;
     savingSettings = false;
     deleting = false;
@@ -50,6 +51,8 @@ export class DomainsListComponent implements OnInit, OnDestroy {
     settingsForm: FormGroup;
     selectedDomain: Domain | null = null;
     linkCount = 0;
+    // Links of the domain being turned off; null when the number could not be loaded
+    deactivateLinkCount: number | null = null;
     readonly domainNotFoundBehavior = DomainNotFoundBehavior;
     private subscription = new Subscription();
 
@@ -123,12 +126,14 @@ export class DomainsListComponent implements OnInit, OnDestroy {
 
     closeSettingsDialog() {
         this.showSettingsDialog = false;
+        this.showDeactivateConfirm = false;
         this.settingsErrorMessage = '';
         this.selectedDomain = null;
     }
 
     saveDomainSettings() {
-        if (!this.selectedDomain) {
+        // A second click while a request is running must not send it again
+        if (!this.selectedDomain || this.savingSettings) {
             return;
         }
 
@@ -137,11 +142,73 @@ export class DomainsListComponent implements OnInit, OnDestroy {
             return;
         }
 
+        // Turning a domain off stops all its links at once: ask first
+        if (this.selectedDomain.isActive && !dto.isActive) {
+            this.askDeactivateConfirm(this.selectedDomain.id);
+            return;
+        }
+
+        this.sendDomainSettings(this.selectedDomain.id, dto);
+    }
+
+    closeDeactivateConfirm() {
+        this.showDeactivateConfirm = false;
+    }
+
+    confirmDeactivate() {
+        // A second click while the request is running must not send it again
+        if (!this.selectedDomain || this.savingSettings) return;
+
+        const dto = this.buildUpdateDomainDto();
+        if (!dto) {
+            this.showDeactivateConfirm = false;
+            return;
+        }
+
+        this.sendDomainSettings(this.selectedDomain.id, dto);
+    }
+
+    private askDeactivateConfirm(domainId: number) {
         this.savingSettings = true;
         this.settingsErrorMessage = '';
         this.cdr.detectChanges();
 
-        const sub = this.domainService.update(this.selectedDomain.id, dto).subscribe({
+        const openConfirm = (count: number | null) => {
+            this.savingSettings = false;
+            // The settings dialog may have been closed while the count was loading
+            if (!this.showSettingsDialog || this.selectedDomain?.id !== domainId) {
+                this.cdr.detectChanges();
+                return;
+            }
+
+            if (count === 0) {
+                // No link stops redirecting: nothing to confirm
+                const dto = this.buildUpdateDomainDto();
+                if (dto) {
+                    this.sendDomainSettings(domainId, dto);
+                }
+                return;
+            }
+
+            this.deactivateLinkCount = count;
+            this.showDeactivateConfirm = true;
+            this.cdr.detectChanges();
+        };
+
+        const sub = this.domainService.getLinkCount(domainId).subscribe({
+            next: (count) => openConfirm(count),
+            error: () => openConfirm(null)
+        });
+
+        this.subscription.add(sub);
+    }
+
+    private sendDomainSettings(domainId: number, dto: UpdateDomainDto) {
+        this.savingSettings = true;
+        this.settingsErrorMessage = '';
+        this.cdr.detectChanges();
+
+        const sub = this.domainService.update(domainId, dto).subscribe({
             next: () => {
                 this.savingSettings = false;
                 this.closeSettingsDialog();
@@ -149,6 +216,7 @@ export class DomainsListComponent implements OnInit, OnDestroy {
             },
             error: (err) => {
                 this.savingSettings = false;
+                this.showDeactivateConfirm = false;
                 this.settingsErrorMessage = this.extractApiErrorMessage(err, DomainsListComponent.updateDomainErrorMessage);
                 this.cdr.detectChanges();
             }

@@ -55,6 +55,7 @@ export class DomainsListComponent implements OnInit, OnDestroy {
     deactivateLinkCount: number | null = null;
     readonly domainNotFoundBehavior = DomainNotFoundBehavior;
     private subscription = new Subscription();
+    private linkCountRequest?: Subscription;
 
     constructor(
         private domainService: DomainService,
@@ -114,6 +115,8 @@ export class DomainsListComponent implements OnInit, OnDestroy {
     }
 
     openSettingsDialog(domain: Domain) {
+        // The dialog may have been closed with a count still loading: its answer is for the previous opening
+        this.cancelLinkCountRequest();
         this.selectedDomain = domain;
         this.settingsErrorMessage = '';
         this.settingsForm.reset({
@@ -168,13 +171,26 @@ export class DomainsListComponent implements OnInit, OnDestroy {
         this.sendDomainSettings(this.selectedDomain.id, dto);
     }
 
+    private cancelLinkCountRequest() {
+        if (this.linkCountRequest && !this.linkCountRequest.closed) {
+            this.linkCountRequest.unsubscribe();
+            this.savingSettings = false;
+        }
+
+        this.linkCountRequest = undefined;
+        this.settingsForm.enable();
+    }
+
     private askDeactivateConfirm(domainId: number) {
         this.savingSettings = true;
         this.settingsErrorMessage = '';
+        // The confirmation must describe what will be saved: no change while the count is loading
+        this.settingsForm.disable();
         this.cdr.detectChanges();
 
         const openConfirm = (count: number | null) => {
             this.savingSettings = false;
+            this.settingsForm.enable();
             // The settings dialog may have been closed while the count was loading
             if (!this.showSettingsDialog || this.selectedDomain?.id !== domainId) {
                 this.cdr.detectChanges();
@@ -195,12 +211,12 @@ export class DomainsListComponent implements OnInit, OnDestroy {
             this.cdr.detectChanges();
         };
 
-        const sub = this.domainService.getLinkCount(domainId).subscribe({
+        this.linkCountRequest = this.domainService.getLinkCount(domainId).subscribe({
             next: (count) => openConfirm(count),
             error: () => openConfirm(null)
         });
 
-        this.subscription.add(sub);
+        this.subscription.add(this.linkCountRequest);
     }
 
     private sendDomainSettings(domainId: number, dto: UpdateDomainDto) {

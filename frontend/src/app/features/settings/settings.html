@@ -25,17 +25,17 @@
 
                 <small
                     *ngIf="settingsForm.get('cacheDuration')?.errors?.['required'] && settingsForm.get('cacheDuration')?.touched"
-                    class="p-error">
+                    class="text-red-500">
                     Cache duration is required.
                 </small>
                 <small
                     *ngIf="settingsForm.get('cacheDuration')?.errors?.['min'] && settingsForm.get('cacheDuration')?.touched"
-                    class="p-error">
+                    class="text-red-500">
                     Cache duration cannot be negative.
                 </small>
                 <small
                     *ngIf="settingsForm.get('cacheDuration')?.errors?.['max'] && settingsForm.get('cacheDuration')?.touched"
-                    class="p-error">
+                    class="text-red-500">
                     Cache duration cannot exceed 86400 seconds (24 hours).
                 </small>
             </div>

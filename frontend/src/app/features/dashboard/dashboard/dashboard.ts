@@ -48,9 +48,9 @@ import packageJson from '../../../../../package.json';
        <div class="bg-surface-0 dark:bg-surface-900 p-6 rounded-xl border border-surface-200 dark:border-surface-700 shadow-sm">
           <div class="flex items-center justify-between mb-4">
              <h3 class="text-lg font-semibold text-surface-700 dark:text-surface-300">Total Links</h3>
-             <i class="pi pi-link text-2xl text-primary-500"></i>
+             <i class="pi pi-link text-2xl text-primary-700"></i>
           </div>
-          <div class="text-4xl font-bold text-primary-500" *ngIf="!loading">{{ totalLinks }}</div>
+          <div class="text-4xl font-bold text-primary-700" *ngIf="!loading">{{ totalLinks }}</div>
           <div class="text-4xl font-bold text-surface-400" *ngIf="loading">--</div>
        </div>
 
@@ -58,9 +58,9 @@ import packageJson from '../../../../../package.json';
        <div class="bg-surface-0 dark:bg-surface-900 p-6 rounded-xl border border-surface-200 dark:border-surface-700 shadow-sm">
           <div class="flex items-center justify-between mb-4">
              <h3 class="text-lg font-semibold text-surface-700 dark:text-surface-300">Active Domains</h3>
-             <i class="pi pi-globe text-2xl text-primary-500"></i>
+             <i class="pi pi-globe text-2xl text-primary-700"></i>
           </div>
-          <div class="text-4xl font-bold text-primary-500" *ngIf="!loading">{{ activeDomains }}</div>
+          <div class="text-4xl font-bold text-primary-700" *ngIf="!loading">{{ activeDomains }}</div>
           <div class="text-4xl font-bold text-surface-400" *ngIf="loading">--</div>
        </div>
     </div>

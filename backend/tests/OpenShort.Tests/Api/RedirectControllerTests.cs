@@ -166,15 +166,20 @@ public class RedirectControllerTests
         redirectResult.Permanent.Should().BeFalse();
     }
 
-    [Test]
-    public async Task RedirectToUrl_ShouldReturnNotFoundPage_WhenCustomNotFoundUrlIsInvalid()
+    // A value stored by an earlier version, which accepted every scheme, is not followed
+    [TestCase("not-a-url")]
+    [TestCase("/path")]
+    [TestCase("javascript:alert(1)")]
+    [TestCase("file:///etc/passwd")]
+    [TestCase("ftp://example.com/file")]
+    public async Task RedirectToUrl_ShouldReturnNotFoundPage_WhenCustomNotFoundUrlIsInvalid(string storedUrl)
     {
         // Arrange
         var domain = new Domain
         {
             Host = "localhost",
             NotFoundBehavior = DomainNotFoundBehavior.RedirectToCustomUrl,
-            NotFoundRedirectUrl = "not-a-url"
+            NotFoundRedirectUrl = storedUrl
         };
         _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "unknown")).ReturnsAsync((Link?)null);
         _mockDomainService.Setup(s => s.GetByHostAsync("localhost")).ReturnsAsync(domain);

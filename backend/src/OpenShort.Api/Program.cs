@@ -166,7 +166,9 @@ builder.Services.AddSingleton<OpenShort.Api.Auth.UsedTwoFactorCodes>();
 // Limits the request rate on the endpoints marked with the auth policy (login, admin setup)
 builder.Services.AddRateLimiter(OpenShort.Api.Auth.AuthProtection.ConfigureRateLimiter);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+        options.InvalidModelStateResponseFactory = OpenShort.Api.Validation.ValidationProblem.Build);
 builder.Services.AddProblemDetails();
 
 

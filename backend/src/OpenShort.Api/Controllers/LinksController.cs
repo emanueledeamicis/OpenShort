@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenShort.Api.Validation;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
+using System.ComponentModel.DataAnnotations;
 
 namespace OpenShort.Api.Controllers;
 
@@ -11,8 +13,7 @@ namespace OpenShort.Api.Controllers;
 public class LinksController : ControllerBase
 {
     private const string LinkNotFoundMessage = "Link not found.";
-    private const string InvalidDestinationUrlMessage = "Invalid Destination URL format.";
-    private const string DisallowedUrlSchemeMessage = "URL scheme is not allowed.";
+    private const string InvalidDestinationUrlMessage = "Destination URL must be an absolute http or https URL of at most 2048 characters.";
     private const string DomainRequiredMessage = "Domain is required.";
     private const string DomainNotAuthorizedMessageTemplate = "Domain '{0}' is not authorized.";
     private const string DomainNotActiveMessageTemplate = "Domain '{0}' is not active.";
@@ -57,15 +58,9 @@ public class LinksController : ControllerBase
     public async Task<ActionResult<Link>> CreateLink(CreateLinkDto dto)
     {
         // 1. URL Validation
-        if (!Uri.TryCreate(dto.DestinationUrl, UriKind.Absolute, out var uriResult))
+        if (!TryFormatDestinationUrl(dto.DestinationUrl, out var formattedDestinationUrl))
         {
              return Problem(statusCode: StatusCodes.Status400BadRequest, detail: InvalidDestinationUrlMessage);
-        }
-
-        var scheme = uriResult.Scheme.ToLower();
-        if (scheme == "javascript" || scheme == "vbscript" || scheme == "data")
-        {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: DisallowedUrlSchemeMessage);
         }
 
         // 2. Domain Validation
@@ -87,12 +82,6 @@ public class LinksController : ControllerBase
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: string.Format(DomainNotActiveMessageTemplate, targetDomainHost));
         }
-
-        // Format Destination URL
-        var uriBuilder = new UriBuilder(dto.DestinationUrl);
-        uriBuilder.Scheme = uriBuilder.Scheme.ToLowerInvariant();
-        uriBuilder.Host = uriBuilder.Host.ToLowerInvariant();
-        var formattedDestinationUrl = uriBuilder.Uri.ToString();
 
         // 3. Create Link via Service
         var link = new Link
@@ -127,23 +116,14 @@ public class LinksController : ControllerBase
             return Problem(statusCode: StatusCodes.Status404NotFound, detail: LinkNotFoundMessage);
         }
 
-        // 2. URL Validation
-        if (!Uri.TryCreate(dto.DestinationUrl, UriKind.Absolute, out var uriResult))
+        // 2. URL Validation. A destination that is not changed is kept as it is: a link created
+        // by an earlier version with another scheme can still be renamed or turned off
+        var formattedDestinationUrl = existingLink.DestinationUrl;
+        if (dto.DestinationUrl != existingLink.DestinationUrl &&
+            !TryFormatDestinationUrl(dto.DestinationUrl, out formattedDestinationUrl))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: InvalidDestinationUrlMessage);
         }
-
-        var scheme = uriResult.Scheme.ToLower();
-        if (scheme == "javascript" || scheme == "vbscript" || scheme == "data")
-        {
-            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: DisallowedUrlSchemeMessage);
-        }
-
-        // Format Destination URL
-        var uriBuilder = new UriBuilder(dto.DestinationUrl);
-        uriBuilder.Scheme = uriBuilder.Scheme.ToLowerInvariant();
-        uriBuilder.Host = uriBuilder.Host.ToLowerInvariant();
-        var formattedDestinationUrl = uriBuilder.Uri.ToString();
 
         // 3. Update fields
         existingLink.DestinationUrl = formattedDestinationUrl;
@@ -186,24 +166,67 @@ public class LinksController : ControllerBase
 
         return NoContent();
     }
+
+    // The destination as it is stored: scheme and host in lower case
+    private static bool TryFormatDestinationUrl(string destinationUrl, out string formattedDestinationUrl)
+    {
+        formattedDestinationUrl = string.Empty;
+        if (!WebUrl.TryParse(destinationUrl, out _))
+        {
+            return false;
+        }
+
+        var uriBuilder = new UriBuilder(destinationUrl);
+        uriBuilder.Scheme = uriBuilder.Scheme.ToLowerInvariant();
+        uriBuilder.Host = uriBuilder.Host.ToLowerInvariant();
+        formattedDestinationUrl = uriBuilder.Uri.ToString();
+
+        // The stored form can be longer than the one that was sent
+        return formattedDestinationUrl.Length <= LinkLimits.DestinationUrlMaxLength;
+    }
+}
+
+// The lengths of the columns of a link
+public static class LinkLimits
+{
+    public const int SlugMaxLength = 50;
+    public const int DestinationUrlMaxLength = 2048;
+    public const int TitleMaxLength = 100;
+    public const int NotesMaxLength = 500;
 }
 
 public class CreateLinkDto
 {
+    [StringLength(LinkLimits.DestinationUrlMaxLength)]
     public required string DestinationUrl { get; set; }
+
+    [StringLength(LinkLimits.SlugMaxLength)]
     public string? Slug { get; set; }
+
     public string? Domain { get; set; }
     public RedirectType RedirectType { get; set; } = RedirectType.Permanent;
+
+    [StringLength(LinkLimits.TitleMaxLength)]
     public string? Title { get; set; }
+
+    [StringLength(LinkLimits.NotesMaxLength)]
     public string? Notes { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
 public class UpdateLinkDto
 {
+    [StringLength(LinkLimits.DestinationUrlMaxLength)]
     public required string DestinationUrl { get; set; }
+
     public RedirectType RedirectType { get; set; } = RedirectType.Permanent;
+
+    [StringLength(LinkLimits.TitleMaxLength)]
     public string? Title { get; set; }
+
+    [StringLength(LinkLimits.NotesMaxLength)]
     public string? Notes { get; set; }
+
     public bool IsActive { get; set; } = true;
 }

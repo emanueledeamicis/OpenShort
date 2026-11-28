@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using OpenShort.Api.Validation;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using System.Net;
@@ -75,7 +76,7 @@ public class RedirectController : ControllerBase
         var domain = await _domainService.GetByHostAsync(host);
 
         if (domain?.NotFoundBehavior == DomainNotFoundBehavior.RedirectToCustomUrl &&
-            Uri.TryCreate(domain.NotFoundRedirectUrl, UriKind.Absolute, out var customUrl))
+            WebUrl.TryParse(domain.NotFoundRedirectUrl, out var customUrl))
         {
             _logger.LogInformation("Missing link on host {Host} redirected to custom 404 URL {Url}", host, customUrl);
             return Redirect(customUrl.ToString());

@@ -69,7 +69,7 @@ It does **not** document the endpoints that accept the dashboard login only:
 - `409 Conflict` when the request conflicts with existing data
 - `500 Internal Server Error` for unexpected server-side failures
 
-Errors are returned as RFC 7807 problem details. The reason is in the `detail` field, or in `errors` when the request body cannot be read (for example a required field is missing).
+Errors are returned as RFC 7807 problem details. The reason is in the `detail` field. When a field of the request body is missing, too long or cannot be read, `errors` also lists the messages field by field.
 
 ## Link Management Endpoints
 
@@ -138,13 +138,13 @@ Request body:
 
 Field notes:
 
-- `destinationUrl` is required and must be an absolute URL: use `http://` or `https://`. The `javascript:`, `vbscript:` and `data:` schemes are rejected
+- `destinationUrl` is required and must be an absolute `http://` or `https://` URL: any other scheme is rejected with `400 Bad Request`
 - `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain. In a short URL the case of the slug does not matter: `/Promo` and `/promo` are the same link. This holds for upper and lower case only: a letter with an accent is another slug with SQLite, while MySQL may read it as the plain letter
 - `domain` is required, and must already exist in OpenShort and be active
 - `redirectType: 301` means permanent redirect and is the default
 - `redirectType: 302` means temporary redirect
 - `title` and `notes` are optional
-- Keep within these lengths: `slug` 50 characters, `destinationUrl` 2048, `title` 100, `notes` 500. The API does not check them yet: a longer value may be stored as it is or cause a server error, depending on the database
+- Maximum lengths: `slug` 50 characters, `destinationUrl` 2048, `title` 100, `notes` 500. A longer value is rejected with `400 Bad Request`
 - `isActive` controls whether the short link can be resolved publicly; the default is `true`
 - a link that is not active or has expired, and every link of a domain that is not active, answers like a link that does not exist: the 404 page, or the custom URL set for the domain
 
@@ -171,6 +171,8 @@ Request body:
 ```
 
 All the fields of the body are replaced: a field left out goes back to its default (`redirectType` 301, `isActive` true, `title` and `notes` empty). The slug and the domain of a link cannot be changed.
+
+`destinationUrl`, `title` and `notes` follow the rules of the creation. One exception: a `destinationUrl` equal to the stored one is always accepted, so a link created by an earlier version with another scheme can still be renamed or turned off.
 
 The response is `204 No Content`.
 
@@ -252,7 +254,7 @@ Field notes:
 
 - `isActive: false` turns the domain off: none of its links redirects until it is active again, and no new link can be created on it. No link is deleted
 - `notFoundBehavior: 0` shows the OpenShort "link not found" page with status `404`
-- `notFoundBehavior: 1` redirects the visitor to `notFoundRedirectUrl`, which is then required and must be an absolute URL
+- `notFoundBehavior: 1` redirects the visitor to `notFoundRedirectUrl`, which is then required and must be an absolute `http://` or `https://` URL
 - All three fields are replaced: send `isActive` every time, or the domain is turned off
 - The host of a domain cannot be changed
 
@@ -302,21 +304,24 @@ Each of these is the `detail` field of a problem details response.
 
 ### Invalid destination URL
 
+`400 Bad Request`, for a destination that is not an absolute `http://` or `https://` URL:
+
+```json
+{
+  "detail": "Destination URL must be an absolute http or https URL of at most 2048 characters."
+}
+```
+
+### Field too long
+
 `400 Bad Request`:
 
 ```json
 {
-  "detail": "Invalid Destination URL format."
-}
-```
-
-### URL scheme not allowed
-
-`400 Bad Request`, for a `javascript:`, `vbscript:` or `data:` destination:
-
-```json
-{
-  "detail": "URL scheme is not allowed."
+  "detail": "The field Title must be a string with a maximum length of 100.",
+  "errors": {
+    "Title": ["The field Title must be a string with a maximum length of 100."]
+  }
 }
 ```
 

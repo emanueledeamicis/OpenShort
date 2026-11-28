@@ -137,12 +137,18 @@ public class LinksControllerTests
         problemDetails!.Detail.Should().Be("Slug already in use for this domain.");
     }
 
-    [Test]
-    public async Task CreateLink_ShouldReturnBadRequest_WhenUrlIsInvalid()
+    [TestCase("invalid-url")]
+    [TestCase("/path")]
+    [TestCase("javascript:alert(1)")]
+    [TestCase("data:text/html,<p>x</p>")]
+    [TestCase("file:///etc/passwd")]
+    [TestCase("ftp://example.com/file")]
+    [TestCase("mailto:someone@example.com")]
+    public async Task CreateLink_ShouldReturnBadRequest_WhenUrlIsNotAnHttpOrHttpsUrl(string destinationUrl)
     {
         var dto = new CreateLinkDto
         {
-            DestinationUrl = "invalid-url",
+            DestinationUrl = destinationUrl,
             Domain = "localhost"
         };
 
@@ -152,25 +158,81 @@ public class LinksControllerTests
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
 
         var problemDetails = (result.Result as ObjectResult)!.Value as ProblemDetails;
-        problemDetails!.Detail.Should().Be("Invalid Destination URL format.");
+        problemDetails!.Detail.Should().Be("Destination URL must be an absolute http or https URL of at most 2048 characters.");
+        _context.Links.Should().BeEmpty();
+    }
+
+    // The stored form adds the slash after the host: it must fit the column as well
+    [Test]
+    public async Task CreateLink_ShouldReturnBadRequest_WhenTheStoredUrlIsLongerThanTheColumn()
+    {
+        var dto = new CreateLinkDto
+        {
+            DestinationUrl = "https://example.com?" + new string('a', 2028),
+            Slug = "long",
+            Domain = "localhost"
+        };
+        dto.DestinationUrl.Length.Should().Be(2048);
+
+        var result = await _controller.CreateLink(dto);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _context.Links.Should().BeEmpty();
     }
 
     [Test]
-    public async Task CreateLink_ShouldReturnBadRequest_WhenUrlSchemIsDangerous()
+    public async Task UpdateLink_ShouldReturnBadRequest_WhenTheNewUrlIsNotAnHttpOrHttpsUrl()
     {
-        var dto = new CreateLinkDto
-        {
-            DestinationUrl = "javascript:alert(1)",
-            Domain = "localhost"
-        };
+        var link = await AddLinkAsync("https://example.com/");
 
-        var result = await _controller.CreateLink(dto);
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto { DestinationUrl = "ftp://example.com/file" });
 
-        result.Result.Should().BeOfType<ObjectResult>()
+        result.Should().BeOfType<ObjectResult>()
             .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-            
-        var problemDetails = (result.Result as ObjectResult)!.Value as ProblemDetails;
-        problemDetails!.Detail.Should().Be("URL scheme is not allowed.");
+        _context.ChangeTracker.Clear();
+        (await _context.Links.FindAsync(link.Id))!.DestinationUrl.Should().Be("https://example.com/");
+    }
+
+    [Test]
+    public async Task UpdateLink_ShouldStoreTheNewUrl_WhenItIsAnHttpOrHttpsUrl()
+    {
+        var link = await AddLinkAsync("https://example.com/");
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto { DestinationUrl = "HTTPS://Example.org/New" });
+
+        result.Should().BeOfType<NoContentResult>();
+        _context.ChangeTracker.Clear();
+        (await _context.Links.FindAsync(link.Id))!.DestinationUrl.Should().Be("https://example.org/New");
+    }
+
+    // A link created by an earlier version with another scheme can still be renamed or turned off
+    [Test]
+    public async Task UpdateLink_ShouldKeepADestinationWithAnotherScheme_WhenItIsNotChanged()
+    {
+        var link = await AddLinkAsync("ftp://example.com/file");
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto
+        {
+            DestinationUrl = "ftp://example.com/file",
+            Title = "Renamed",
+            IsActive = false
+        });
+
+        result.Should().BeOfType<NoContentResult>();
+        _context.ChangeTracker.Clear();
+        var stored = await _context.Links.FindAsync(link.Id);
+        stored!.DestinationUrl.Should().Be("ftp://example.com/file");
+        stored.Title.Should().Be("Renamed");
+        stored.IsActive.Should().BeFalse();
+    }
+
+    private async Task<Link> AddLinkAsync(string destinationUrl)
+    {
+        var link = new Link { Slug = "stored", Domain = "localhost", DestinationUrl = destinationUrl };
+        _context.Links.Add(link);
+        await _context.SaveChangesAsync();
+        return link;
     }
 
     [Test]

@@ -75,10 +75,16 @@
             <div class="flex flex-col gap-2">
                 <label for="destinationUrl" class="font-medium">Destination URL *</label>
                 <input pInputText id="destinationUrl" formControlName="destinationUrl" placeholder="https://example.com"
-                    class="w-full" [disabled]="saving" />
-                <small class="text-red-500"
-                    *ngIf="linkForm.get('destinationUrl')?.invalid && linkForm.get('destinationUrl')?.touched">
+                    class="w-full" aria-describedby="destinationUrlError destinationUrlLength"
+                    [attr.aria-invalid]="linkForm.get('destinationUrl')?.hasError('maxlength') || (linkForm.get('destinationUrl')?.invalid && linkForm.get('destinationUrl')?.touched) ? 'true' : null"
+                    [disabled]="saving" />
+                <small id="destinationUrlError" class="text-red-500"
+                    *ngIf="(linkForm.get('destinationUrl')?.hasError('required') || linkForm.get('destinationUrl')?.hasError('pattern')) && linkForm.get('destinationUrl')?.touched">
                     Valid URL required (must start with http:// or https://)
+                </small>
+                <small id="destinationUrlLength" class="text-red-500" aria-live="polite" *ngIf="linkForm.get('destinationUrl')?.hasError('maxlength')">
+                    The URL can be at most {{ maxLengths.destinationUrl }} characters (now
+                    {{ linkForm.get('destinationUrl')?.value?.length }})
                 </small>
             </div>
 
@@ -105,8 +111,21 @@
             <div class="flex flex-col gap-2">
                 <label for="slug" class="font-medium">Custom Slug (optional)</label>
                 <input pInputText id="slug" formControlName="slug" placeholder="my-link" class="w-full"
-                    [disabled]="saving" />
-                <small class="text-surface-500">Leave empty to auto-generate</small>
+                    aria-describedby="slugError slugLength slugHelp"
+                    [attr.aria-invalid]="linkForm.get('slug')?.invalid ? 'true' : null" [disabled]="saving" />
+                <!-- Shown while typing: the field is optional, and may never be left -->
+                <small id="slugError" class="text-red-500" role="alert"
+                    *ngIf="linkForm.get('slug')?.hasError('pattern')">
+                    Only unaccented letters (a-z), digits, - and _ are allowed
+                </small>
+                <small id="slugLength" class="text-red-500" aria-live="polite" *ngIf="linkForm.get('slug')?.hasError('maxlength')">
+                    The slug can be at most {{ maxLengths.slug }} characters (now
+                    {{ linkForm.get('slug')?.value?.length }})
+                </small>
+                <small id="slugHelp" class="text-surface-500">
+                    Unaccented letters (a-z), digits, - and _ only, up to {{ maxLengths.slug }} characters. Saved in
+                    lower case. Leave empty to auto-generate.
+                </small>
             </div>
 
             <div class="flex flex-col gap-2">
@@ -128,13 +147,23 @@
             <div class="flex flex-col gap-2">
                 <label for="title" class="font-medium">Title (optional)</label>
                 <input pInputText id="title" formControlName="title" placeholder="Link title" class="w-full"
+                    aria-describedby="titleLength" [attr.aria-invalid]="linkForm.get('title')?.invalid ? 'true' : null"
                     [disabled]="saving" />
+                <small id="titleLength" class="text-red-500" aria-live="polite" *ngIf="linkForm.get('title')?.hasError('maxlength')">
+                    The title can be at most {{ maxLengths.title }} characters (now
+                    {{ linkForm.get('title')?.value?.length }})
+                </small>
             </div>
 
             <div class="flex flex-col gap-2">
                 <label for="notes" class="font-medium">Notes (optional)</label>
                 <input pInputText id="notes" formControlName="notes" placeholder="Additional notes..." class="w-full"
+                    aria-describedby="notesLength" [attr.aria-invalid]="linkForm.get('notes')?.invalid ? 'true' : null"
                     [disabled]="saving" />
+                <small id="notesLength" class="text-red-500" aria-live="polite" *ngIf="linkForm.get('notes')?.hasError('maxlength')">
+                    The notes can be at most {{ maxLengths.notes }} characters (now
+                    {{ linkForm.get('notes')?.value?.length }})
+                </small>
             </div>
 
             <div class="flex items-center gap-2">
@@ -161,10 +190,17 @@
             <div class="flex flex-col gap-2">
                 <label for="editDestinationUrl" class="font-medium">Destination URL *</label>
                 <input pInputText id="editDestinationUrl" formControlName="destinationUrl"
-                    placeholder="https://example.com" class="w-full" [disabled]="saving" />
-                <small class="text-red-500"
-                    *ngIf="editForm.get('destinationUrl')?.invalid && editForm.get('destinationUrl')?.touched">
+                    placeholder="https://example.com" class="w-full"
+                    aria-describedby="editDestinationUrlError editDestinationUrlLength"
+                    [attr.aria-invalid]="editForm.get('destinationUrl')?.hasError('maxlength') || (editForm.get('destinationUrl')?.invalid && editForm.get('destinationUrl')?.touched) ? 'true' : null"
+                    [disabled]="saving" />
+                <small id="editDestinationUrlError" class="text-red-500"
+                    *ngIf="(editForm.get('destinationUrl')?.hasError('required') || editForm.get('destinationUrl')?.hasError('pattern')) && editForm.get('destinationUrl')?.touched">
                     Valid URL required (must start with http:// or https://)
+                </small>
+                <small id="editDestinationUrlLength" class="text-red-500" aria-live="polite" *ngIf="editForm.get('destinationUrl')?.hasError('maxlength')">
+                    The URL can be at most {{ maxLengths.destinationUrl }} characters (now
+                    {{ editForm.get('destinationUrl')?.value?.length }})
                 </small>
             </div>
 
@@ -187,13 +223,23 @@
             <div class="flex flex-col gap-2">
                 <label for="editTitle" class="font-medium">Title (optional)</label>
                 <input pInputText id="editTitle" formControlName="title" placeholder="Link title" class="w-full"
+                    aria-describedby="editTitleLength" [attr.aria-invalid]="editForm.get('title')?.invalid ? 'true' : null"
                     [disabled]="saving" />
+                <small id="editTitleLength" class="text-red-500" aria-live="polite" *ngIf="editForm.get('title')?.hasError('maxlength')">
+                    The title can be at most {{ maxLengths.title }} characters (now
+                    {{ editForm.get('title')?.value?.length }})
+                </small>
             </div>
 
             <div class="flex flex-col gap-2">
                 <label for="editNotes" class="font-medium">Notes (optional)</label>
                 <input pInputText id="editNotes" formControlName="notes" placeholder="Additional notes..."
-                    class="w-full" [disabled]="saving" />
+                    class="w-full" aria-describedby="editNotesLength" [attr.aria-invalid]="editForm.get('notes')?.invalid ? 'true' : null"
+                    [disabled]="saving" />
+                <small id="editNotesLength" class="text-red-500" aria-live="polite" *ngIf="editForm.get('notes')?.hasError('maxlength')">
+                    The notes can be at most {{ maxLengths.notes }} characters (now
+                    {{ editForm.get('notes')?.value?.length }})
+                </small>
             </div>
 
             <div class="flex items-center gap-2">

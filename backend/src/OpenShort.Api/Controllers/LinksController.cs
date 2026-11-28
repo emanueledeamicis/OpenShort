@@ -203,6 +203,13 @@ public class LinksController : ControllerBase
 public static class LinkLimits
 {
     public const int SlugMaxLength = 50;
+
+    // A slug is one segment of the path of the short URL, and must reach its link as it is written:
+    // "/" can never do it, "?", "#", a space or a letter with an accent only once they are encoded.
+    // "." is left out because the name of a file can be served in place of the link. The set is kept
+    // to the characters that need no thought: nothing else is allowed, "~" included
+    public const string SlugPattern = "^[A-Za-z0-9_-]+$";
+    public const string InvalidSlugMessage = "Slug can contain only letters, digits, '-' and '_'.";
     public const int DestinationUrlMaxLength = 2048;
     public const int TitleMaxLength = 100;
     public const int NotesMaxLength = 500;
@@ -213,7 +220,9 @@ public class CreateLinkDto
     [StringLength(LinkLimits.DestinationUrlMaxLength)]
     public required string DestinationUrl { get; set; }
 
+    // Null or empty: the slug is generated
     [StringLength(LinkLimits.SlugMaxLength)]
+    [RegularExpression(LinkLimits.SlugPattern, ErrorMessage = LinkLimits.InvalidSlugMessage)]
     public string? Slug { get; set; }
 
     public string? Domain { get; set; }

@@ -79,6 +79,51 @@ public class ValidationOverHttpTests
     }
 
     [Test]
+    public async Task CreateLink_ShouldReturnBadRequestWithTheReasonInTheDetail_WhenTheSlugHasACharacterThatIsNotAllowed()
+    {
+        // Act
+        using var response = await _client.PostAsJsonAsync("/api/links", new
+        {
+            destinationUrl = "https://example.com/",
+            domain = "localhost",
+            slug = "My Slug/é?x#y"
+        });
+        var problem = await ReadProblemAsync(response);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        problem.GetProperty("detail").GetString().Should().Be("Slug can contain only letters, digits, '-' and '_'.");
+        problem.GetProperty("errors").GetProperty("Slug")[0].GetString().Should().Be("Slug can contain only letters, digits, '-' and '_'.");
+        _linkServiceMock.VerifyNoOtherCalls();
+    }
+
+    // Null or empty: the validation lets it through, and the service generates the slug
+    [TestCase(null)]
+    [TestCase("")]
+    public async Task CreateLink_ShouldReachTheServiceWithoutASlug_WhenTheSlugIsNullOrEmpty(string? slug)
+    {
+        // Arrange
+        string? receivedSlug = null;
+        var domainServiceMock = Mock.Get(_app.Services.GetRequiredService<IDomainService>());
+        domainServiceMock.Setup(service => service.GetByHostAsync("localhost")).ReturnsAsync(new Domain { Host = "localhost", IsActive = true });
+        _linkServiceMock
+            .Setup(service => service.CreateAsync(It.IsAny<Link>()))
+            .ReturnsAsync((Link link) => { receivedSlug = link.Slug; link.Id = 1; link.Slug = "generated"; return link; });
+
+        // Act
+        using var response = await _client.PostAsJsonAsync("/api/links", new
+        {
+            destinationUrl = "https://example.com/",
+            domain = "localhost",
+            slug
+        });
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        receivedSlug.Should().BeEmpty();
+    }
+
+    [Test]
     public async Task CreateLink_ShouldReturnBadRequestWithTheReasonInTheDetail_WhenTheDestinationIsMissing()
     {
         // Act

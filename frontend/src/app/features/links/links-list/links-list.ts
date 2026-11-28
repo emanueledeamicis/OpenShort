@@ -76,7 +76,8 @@ export class LinksListComponent implements OnInit, OnDestroy {
     ) {
         this.linkForm = this.fb.group({
             destinationUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/)]],
-            slug: [''],
+            // Same rules as the API: one segment of the path of the short URL
+            slug: ['', [Validators.pattern(/^[A-Za-z0-9_-]*$/), Validators.maxLength(50)]],
             domain: ['', Validators.required],
             redirectType: [RedirectType.Permanent, Validators.required],
             title: [''],

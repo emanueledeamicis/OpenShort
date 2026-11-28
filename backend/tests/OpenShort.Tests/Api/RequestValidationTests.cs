@@ -43,6 +43,35 @@ public class RequestValidationTests
         Validate(dto).Should().BeEquivalentTo("DestinationUrl", "Slug", "Title", "Notes");
     }
 
+    [TestCase(null)]
+    [TestCase("")]
+    [TestCase("promo")]
+    [TestCase("Promo-2026_IT")]
+    [TestCase("-")]
+    [TestCase("_")]
+    public void CreateLinkDto_ShouldAcceptASlug_MadeOfLettersDigitsHyphensAndUnderscores(string? slug)
+    {
+        Validate(new CreateLinkDto { DestinationUrl = "https://example.com/", Slug = slug }).Should().BeEmpty();
+    }
+
+    [TestCase(" ")]
+    [TestCase("my slug")]
+    [TestCase(" promo")]
+    [TestCase("promo ")]
+    [TestCase("promo\n")]
+    [TestCase("a/b")]
+    [TestCase("a?b")]
+    [TestCase("a#b")]
+    [TestCase("a.b")]
+    [TestCase("a%20b")]
+    [TestCase("promó")]
+    [TestCase("ｐｒｏｍｏ")]
+    [TestCase("١٢٣")]
+    public void CreateLinkDto_ShouldRefuseASlug_WithAnyOtherCharacter(string slug)
+    {
+        Validate(new CreateLinkDto { DestinationUrl = "https://example.com/", Slug = slug }).Should().BeEquivalentTo("Slug");
+    }
+
     [Test]
     public void CreateDomainDto_ShouldRefuseAHost_OverItsMaximumLength()
     {

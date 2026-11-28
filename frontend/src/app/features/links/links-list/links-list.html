@@ -75,7 +75,7 @@
             <div class="flex flex-col gap-2">
                 <label for="destinationUrl" class="font-medium">Destination URL *</label>
                 <input pInputText id="destinationUrl" formControlName="destinationUrl" placeholder="https://example.com"
-                    class="w-full" [disabled]="saving" />
+                    class="w-full" [attr.maxlength]="2048" [disabled]="saving" />
                 <small class="text-red-500"
                     *ngIf="linkForm.get('destinationUrl')?.invalid && linkForm.get('destinationUrl')?.touched">
                     Valid URL required (must start with http:// or https://)
@@ -105,8 +105,15 @@
             <div class="flex flex-col gap-2">
                 <label for="slug" class="font-medium">Custom Slug (optional)</label>
                 <input pInputText id="slug" formControlName="slug" placeholder="my-link" class="w-full"
-                    [disabled]="saving" />
-                <small class="text-surface-500">Leave empty to auto-generate</small>
+                    [attr.maxlength]="50" aria-describedby="slugHelp slugError"
+                    [attr.aria-invalid]="linkForm.get('slug')?.invalid ? 'true' : null" [disabled]="saving" />
+                <small id="slugHelp" class="text-surface-500">
+                    Letters, digits, - and _ only, up to 50 characters. Saved in lower case. Leave empty to
+                    auto-generate.
+                </small>
+                <small id="slugError" class="text-red-500" role="alert" *ngIf="linkForm.get('slug')?.invalid">
+                    Only letters, digits, - and _ are allowed
+                </small>
             </div>
 
             <div class="flex flex-col gap-2">
@@ -128,13 +135,13 @@
             <div class="flex flex-col gap-2">
                 <label for="title" class="font-medium">Title (optional)</label>
                 <input pInputText id="title" formControlName="title" placeholder="Link title" class="w-full"
-                    [disabled]="saving" />
+                    [attr.maxlength]="100" [disabled]="saving" />
             </div>
 
             <div class="flex flex-col gap-2">
                 <label for="notes" class="font-medium">Notes (optional)</label>
                 <input pInputText id="notes" formControlName="notes" placeholder="Additional notes..." class="w-full"
-                    [disabled]="saving" />
+                    [attr.maxlength]="500" [disabled]="saving" />
             </div>
 
             <div class="flex items-center gap-2">
@@ -153,6 +160,8 @@
 <!-- Edit Link Dialog -->
 <p-dialog header="Edit Link" [(visible)]="showEditDialog" [modal]="true" [style]="{ width: '500px' }"
     [draggable]="false" [resizable]="false">
+    <!-- The limits are set as plain attributes: a longer value stored by an earlier version stays valid
+         and can be saved as it is -->
     <form [formGroup]="editForm" (ngSubmit)="updateLink()">
         <!-- Error Message -->
         <p-message *ngIf="editErrorMessage" severity="error" [text]="editErrorMessage" styleClass="mb-4"></p-message>
@@ -161,7 +170,7 @@
             <div class="flex flex-col gap-2">
                 <label for="editDestinationUrl" class="font-medium">Destination URL *</label>
                 <input pInputText id="editDestinationUrl" formControlName="destinationUrl"
-                    placeholder="https://example.com" class="w-full" [disabled]="saving" />
+                    placeholder="https://example.com" class="w-full" [attr.maxlength]="2048" [disabled]="saving" />
                 <small class="text-red-500"
                     *ngIf="editForm.get('destinationUrl')?.invalid && editForm.get('destinationUrl')?.touched">
                     Valid URL required (must start with http:// or https://)
@@ -187,13 +196,13 @@
             <div class="flex flex-col gap-2">
                 <label for="editTitle" class="font-medium">Title (optional)</label>
                 <input pInputText id="editTitle" formControlName="title" placeholder="Link title" class="w-full"
-                    [disabled]="saving" />
+                    [attr.maxlength]="100" [disabled]="saving" />
             </div>
 
             <div class="flex flex-col gap-2">
                 <label for="editNotes" class="font-medium">Notes (optional)</label>
                 <input pInputText id="editNotes" formControlName="notes" placeholder="Additional notes..."
-                    class="w-full" [disabled]="saving" />
+                    class="w-full" [attr.maxlength]="500" [disabled]="saving" />
             </div>
 
             <div class="flex items-center gap-2">

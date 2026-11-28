@@ -139,7 +139,7 @@ Request body:
 Field notes:
 
 - `destinationUrl` is required and must be an absolute `http://` or `https://` URL: any other scheme is rejected with `400 Bad Request`
-- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain. In a short URL the case of the slug does not matter: `/Promo` and `/promo` are the same link. This holds for upper and lower case only: a letter with an accent is another slug with SQLite, while MySQL may read it as the plain letter
+- `slug` is optional: when it is missing or empty, OpenShort generates one. It can contain only the letters `a`-`z` and `A`-`Z`, digits, `-` and `_`: any other character is rejected with `400 Bad Request`. It is stored in lower case and is unique within its domain. In a short URL the case of the slug does not matter: `/Promo` and `/promo` are the same link. This holds for upper and lower case only: a letter with an accent is another slug with SQLite, while MySQL may read it as the plain letter
 - `domain` is required, and must already exist in OpenShort and be active
 - `redirectType: 301` means permanent redirect and is the default
 - `redirectType: 302` means temporary redirect
@@ -309,6 +309,19 @@ Each of these is the `detail` field of a problem details response.
 ```json
 {
   "detail": "Destination URL must be an absolute http or https URL of at most 2048 characters."
+}
+```
+
+### Invalid slug
+
+`400 Bad Request`:
+
+```json
+{
+  "detail": "Slug can contain only letters, digits, '-' and '_'.",
+  "errors": {
+    "Slug": ["Slug can contain only letters, digits, '-' and '_'."]
+  }
 }
 ```
 

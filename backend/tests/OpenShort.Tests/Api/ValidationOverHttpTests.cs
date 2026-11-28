@@ -79,6 +79,25 @@ public class ValidationOverHttpTests
     }
 
     [Test]
+    public async Task CreateLink_ShouldReturnBadRequestWithTheReasonInTheDetail_WhenTheSlugHasACharacterThatIsNotAllowed()
+    {
+        // Act
+        using var response = await _client.PostAsJsonAsync("/api/links", new
+        {
+            destinationUrl = "https://example.com/",
+            domain = "localhost",
+            slug = "My Slug/é?x#y"
+        });
+        var problem = await ReadProblemAsync(response);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        problem.GetProperty("detail").GetString().Should().Be("Slug can contain only letters, digits, '-' and '_'.");
+        problem.GetProperty("errors").GetProperty("Slug")[0].GetString().Should().Be("Slug can contain only letters, digits, '-' and '_'.");
+        _linkServiceMock.VerifyNoOtherCalls();
+    }
+
+    [Test]
     public async Task CreateLink_ShouldReturnBadRequestWithTheReasonInTheDetail_WhenTheDestinationIsMissing()
     {
         // Act

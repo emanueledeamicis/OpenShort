@@ -78,17 +78,17 @@ public class DomainsController : ControllerBase
             return Problem(statusCode: StatusCodes.Status404NotFound, detail: DomainNotFoundMessage);
         }
 
+        // Stored as it is sent to the visitor: with ASCII characters only
+        string? notFoundRedirectUrl = null;
         if (dto.NotFoundBehavior == DomainNotFoundBehavior.RedirectToCustomUrl &&
-            !WebUrl.TryParse(dto.NotFoundRedirectUrl, out _))
+            (!WebUrl.TryParse(dto.NotFoundRedirectUrl, out var customUrl) || !WebUrl.TryEncode(customUrl, out notFoundRedirectUrl)))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: InvalidCustomUrlMessage);
         }
 
         domain.IsActive = dto.IsActive;
         domain.NotFoundBehavior = dto.NotFoundBehavior;
-        domain.NotFoundRedirectUrl = dto.NotFoundBehavior == DomainNotFoundBehavior.RedirectToCustomUrl
-            ? dto.NotFoundRedirectUrl?.Trim()
-            : null;
+        domain.NotFoundRedirectUrl = notFoundRedirectUrl;
 
         await _domainService.UpdateAsync(domain);
 

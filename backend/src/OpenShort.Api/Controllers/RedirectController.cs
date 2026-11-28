@@ -51,15 +51,21 @@ public class RedirectController : ControllerBase
                 return await HandleMissingLinkAsync(host, slug);
             }
 
-            _logger.LogInformation("Redirecting slug {Slug} to {DestinationUrl}", slug, link.DestinationUrl);
+            if (!WebUrl.TryGetLocation(link.DestinationUrl, out var location))
+            {
+                _logger.LogWarning("Redirect failed: the destination of slug {Slug} on host {Host} cannot be written in a Location header", slug, host);
+                return await HandleMissingLinkAsync(host, slug);
+            }
+
+            _logger.LogInformation("Redirecting slug {Slug} to {DestinationUrl}", slug, location);
 
             if (link.RedirectType == RedirectType.Permanent)
             {
-                return RedirectPermanent(link.DestinationUrl);
+                return RedirectPermanent(location);
             }
             else
             {
-                return Redirect(link.DestinationUrl);
+                return Redirect(location);
             }
         }
         catch (Exception ex)
@@ -76,10 +82,11 @@ public class RedirectController : ControllerBase
         var domain = await _domainService.GetByHostAsync(host);
 
         if (domain?.NotFoundBehavior == DomainNotFoundBehavior.RedirectToCustomUrl &&
-            WebUrl.TryParse(domain.NotFoundRedirectUrl, out var customUrl))
+            WebUrl.TryParse(domain.NotFoundRedirectUrl, out var customUrl) &&
+            WebUrl.TryEncode(customUrl, out var location))
         {
-            _logger.LogInformation("Missing link on host {Host} redirected to custom 404 URL {Url}", host, customUrl);
-            return Redirect(customUrl.ToString());
+            _logger.LogInformation("Missing link on host {Host} redirected to custom 404 URL {Url}", host, location);
+            return Redirect(location);
         }
 
         return BuildOpenShortNotFoundPage(host, slug);

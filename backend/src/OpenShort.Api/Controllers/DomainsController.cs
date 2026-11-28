@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OpenShort.Api.Validation;
 using OpenShort.Core.Entities;
 using OpenShort.Core.Interfaces;
 using System.ComponentModel.DataAnnotations;
@@ -13,7 +14,7 @@ public class DomainsController : ControllerBase
 {
     private const string DomainNotFoundMessage = "Domain not found.";
     private const string DomainAlreadyExistsMessage = "Domain already exists.";
-    private const string InvalidCustomUrlMessage = "A valid absolute custom 404 URL is required when redirect mode is enabled.";
+    private const string InvalidCustomUrlMessage = "An absolute http or https custom 404 URL is required when redirect mode is enabled.";
 
     private readonly IDomainService _domainService;
     private readonly ILogger<DomainsController> _logger;
@@ -78,7 +79,7 @@ public class DomainsController : ControllerBase
         }
 
         if (dto.NotFoundBehavior == DomainNotFoundBehavior.RedirectToCustomUrl &&
-            !Uri.TryCreate(dto.NotFoundRedirectUrl, UriKind.Absolute, out _))
+            !WebUrl.TryParse(dto.NotFoundRedirectUrl, out _))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: InvalidCustomUrlMessage);
         }
@@ -126,6 +127,7 @@ public class DomainsController : ControllerBase
 
 public class CreateDomainDto
 {
+    [StringLength(255)]
     public required string Host { get; set; }
 }
 

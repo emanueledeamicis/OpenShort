@@ -169,6 +169,10 @@ public class DomainsControllerTests
     [TestCase(null)]
     [TestCase("")]
     [TestCase("not-a-url")]
+    [TestCase("/path")]
+    [TestCase("javascript:alert(1)")]
+    [TestCase("file:///etc/passwd")]
+    [TestCase("ftp://example.com/file")]
     public async Task UpdateDomain_ShouldReturnBadRequest_WhenCustomNotFoundUrlIsInvalid(string? url)
     {
         // Arrange

@@ -119,7 +119,9 @@ builder.Services.AddAuthentication(options =>
             var secretKey = await jwtProvider.GetOrGenerateKeyAsync();
             
             context.Options.TokenValidationParameters.IssuerSigningKey = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(secretKey));
-        }
+        },
+        // A token outlives the deletion of its user: it is accepted only while the user exists
+        OnTokenValidated = OpenShort.Api.Auth.SessionValidation.RejectDeletedUserAsync
     };
 })
 .AddScheme<OpenShort.Api.Auth.ApiKeyAuthOptions, OpenShort.Api.Auth.ApiKeyAuthHandler>(

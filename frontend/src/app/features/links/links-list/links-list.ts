@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, AbstractControl, FormBuilder, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -43,6 +43,10 @@ export class LinksListComponent implements OnInit, OnDestroy {
     private static readonly toggleLinkErrorMessage = 'Failed to update link status. Please try again.';
     private static readonly copyLinkErrorMessage = 'Unable to copy the short URL.';
 
+    // Same rules as the API
+    private static readonly slugPattern = /^[A-Za-z0-9_-]*$/;
+    readonly maxLengths = { destinationUrl: 2048, slug: 50, title: 100, notes: 500 };
+
     links: Link[] = [];
     domains: Domain[] = [];
     // The ones a new link can be created on: the API refuses a domain that is turned off
@@ -75,23 +79,36 @@ export class LinksListComponent implements OnInit, OnDestroy {
         private cdr: ChangeDetectorRef
     ) {
         this.linkForm = this.fb.group({
-            destinationUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/)]],
-            // Same rules as the API: one segment of the path of the short URL
-            slug: ['', [Validators.pattern(/^[A-Za-z0-9_-]*$/), Validators.maxLength(50)]],
+            destinationUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/), Validators.maxLength(this.maxLengths.destinationUrl)]],
+            slug: ['', [Validators.pattern(LinksListComponent.slugPattern), Validators.maxLength(this.maxLengths.slug)]],
             domain: ['', Validators.required],
             redirectType: [RedirectType.Permanent, Validators.required],
-            title: [''],
-            notes: [''],
+            title: ['', Validators.maxLength(this.maxLengths.title)],
+            notes: ['', Validators.maxLength(this.maxLengths.notes)],
             isActive: [true]
         });
 
         this.editForm = this.fb.group({
-            destinationUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/)]],
+            destinationUrl: ['', [Validators.required, Validators.pattern(/^https?:\/\/.+/), this.maxLengthWhenChanged('destinationUrl')]],
             redirectType: [RedirectType.Permanent, Validators.required],
-            title: [''],
-            notes: [''],
+            title: ['', this.maxLengthWhenChanged('title')],
+            notes: ['', this.maxLengthWhenChanged('notes')],
             isActive: [true]
         });
+    }
+
+    // The length is checked only on a value that was changed: a longer one, stored by an earlier
+    // version, can be saved as it is, like the API does
+    private maxLengthWhenChanged(field: 'destinationUrl' | 'title' | 'notes'): ValidatorFn {
+        return (control: AbstractControl) => {
+            const value: string = control.value || '';
+            const requiredLength = this.maxLengths[field];
+            if (value.length <= requiredLength || value === (this.selectedLink?.[field] || '')) {
+                return null;
+            }
+
+            return { maxlength: { requiredLength, actualLength: value.length } };
+        };
     }
 
     ngOnInit() {

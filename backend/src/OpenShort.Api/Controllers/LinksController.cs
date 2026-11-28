@@ -204,8 +204,10 @@ public static class LinkLimits
 {
     public const int SlugMaxLength = 50;
 
-    // A slug is one segment of the path of the short URL: "/", "?" or "#" in it would make a link
-    // that no address can reach
+    // A slug is one segment of the path of the short URL, and must reach its link as it is written:
+    // "/" can never do it, "?", "#", a space or a letter with an accent only once they are encoded.
+    // "." is left out because the name of a file can be served in place of the link. The set is kept
+    // to the characters that need no thought: nothing else is allowed, "~" included
     public const string SlugPattern = "^[A-Za-z0-9_-]+$";
     public const string InvalidSlugMessage = "Slug can contain only letters, digits, '-' and '_'.";
     public const int DestinationUrlMaxLength = 2048;

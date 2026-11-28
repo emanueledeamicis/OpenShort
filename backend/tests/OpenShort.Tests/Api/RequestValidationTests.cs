@@ -49,6 +49,7 @@ public class RequestValidationTests
     [TestCase("Promo-2026_IT")]
     [TestCase("-")]
     [TestCase("_")]
+    [TestCase("a-b_c-d_e-f_g-h_i-j_k-l_m-n_o-p_q-r_s-t_u-v_w-x_y-")]
     public void CreateLinkDto_ShouldAcceptASlug_MadeOfLettersDigitsHyphensAndUnderscores(string? slug)
     {
         Validate(new CreateLinkDto { DestinationUrl = "https://example.com/", Slug = slug }).Should().BeEmpty();
@@ -63,6 +64,12 @@ public class RequestValidationTests
     [TestCase("a?b")]
     [TestCase("a#b")]
     [TestCase("a.b")]
+    [TestCase("a~b")]
+    [TestCase("a+b")]
+    [TestCase("a\tb")]
+    [TestCase("a\nb")]
+    [TestCase("\u212A")]
+    [TestCase("\u0131")]
     [TestCase("a%20b")]
     [TestCase("promó")]
     [TestCase("ｐｒｏｍｏ")]

@@ -9,7 +9,7 @@ import packageJson from '../../../../../package.json';
   standalone: true,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, CommonModule],
   template: `
-    <div class="flex min-h-screen bg-surface-50 dark:bg-surface-950">
+    <div class="flex min-h-screen">
       <!-- Sidebar -->
       <aside class="w-64 bg-surface-0 dark:bg-surface-900 border-r border-surface-200 dark:border-surface-700 p-4 flex flex-col">
         <div class="flex flex-col gap-1 mb-8 px-2">
@@ -20,32 +20,32 @@ import packageJson from '../../../../../package.json';
         </div>
         
         <nav class="flex-1 flex flex-col gap-2">
-            <a routerLink="/dashboard" routerLinkActive="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400" 
+            <a routerLink="/dashboard" routerLinkActive="!bg-primary-50 dark:!bg-primary-900/20 !text-primary-700 dark:!text-primary-400" ariaCurrentWhenActive="page" 
                class="p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
                 <i class="pi pi-home"></i>
                 <span class="font-medium">Dashboard</span>
             </a>
-            <a routerLink="/links" routerLinkActive="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400" 
+            <a routerLink="/links" routerLinkActive="!bg-primary-50 dark:!bg-primary-900/20 !text-primary-700 dark:!text-primary-400" ariaCurrentWhenActive="page" 
                class="p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
                 <i class="pi pi-link"></i>
                 <span class="font-medium">Links</span>
             </a>
-             <a routerLink="/domains" routerLinkActive="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400" 
+             <a routerLink="/domains" routerLinkActive="!bg-primary-50 dark:!bg-primary-900/20 !text-primary-700 dark:!text-primary-400" ariaCurrentWhenActive="page" 
                class="p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
                 <i class="pi pi-globe"></i>
                 <span class="font-medium">Domains</span>
             </a>
-             <a routerLink="/users" routerLinkActive="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400" 
+             <a routerLink="/users" routerLinkActive="!bg-primary-50 dark:!bg-primary-900/20 !text-primary-700 dark:!text-primary-400" ariaCurrentWhenActive="page" 
                class="p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
                 <i class="pi pi-users"></i>
                 <span class="font-medium">Users</span>
             </a>
-             <a routerLink="/security" routerLinkActive="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400" 
+             <a routerLink="/security" routerLinkActive="!bg-primary-50 dark:!bg-primary-900/20 !text-primary-700 dark:!text-primary-400" ariaCurrentWhenActive="page" 
                class="p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
                 <i class="pi pi-lock"></i>
                 <span class="font-medium">Security</span>
             </a>
-             <a routerLink="/settings" routerLinkActive="bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400" 
+             <a routerLink="/settings" routerLinkActive="!bg-primary-50 dark:!bg-primary-900/20 !text-primary-700 dark:!text-primary-400" ariaCurrentWhenActive="page" 
                class="p-3 rounded-lg flex items-center gap-3 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
                 <i class="pi pi-cog"></i>
                 <span class="font-medium">Settings</span>
@@ -67,7 +67,7 @@ import packageJson from '../../../../../package.json';
                   <i class="pi pi-globe text-base"></i>
                   <span>
                       <span class="block font-medium">Visit OpenShort.tech</span>
-                      <span class="block text-xs text-surface-500 group-hover:text-primary-600 dark:text-surface-400 dark:group-hover:text-primary-300">External link</span>
+                      <span class="block text-xs text-surface-500 group-hover:text-primary-700 dark:text-surface-400 dark:group-hover:text-primary-300">External link</span>
                   </span>
               </span>
               <i class="pi pi-external-link text-xs opacity-70"></i>

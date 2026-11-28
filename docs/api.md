@@ -139,7 +139,7 @@ Request body:
 Field notes:
 
 - `destinationUrl` is required and must be an absolute URL: use `http://` or `https://`. The `javascript:`, `vbscript:` and `data:` schemes are rejected
-- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain. In a short URL the case of the slug does not matter: `/Promo` and `/promo` are the same link
+- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain. In a short URL the case of the slug does not matter: `/Promo` and `/promo` are the same link. This holds for upper and lower case only: a letter with an accent is another slug with SQLite, while MySQL may read it as the plain letter
 - `domain` is required, and must already exist in OpenShort and be active
 - `redirectType: 301` means permanent redirect and is the default
 - `redirectType: 302` means temporary redirect

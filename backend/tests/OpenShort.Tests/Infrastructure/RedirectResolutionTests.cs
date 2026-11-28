@@ -116,11 +116,13 @@ public class RedirectResolutionTests
     }
 
     [Test]
-    public async Task Resolve_ShouldReturnNull_WhenTheDomainIsInactive_WhateverTheCaseOfTheHost()
+    public async Task Resolve_ShouldReturnNullAtOnce_WhenTheDomainIsTurnedOffAfterARequestWithTheHostInAnotherCase()
     {
-        _domain.IsActive = false;
-        await _context.SaveChangesAsync();
         await AddLinkAsync();
+        (await _linkService.ResolveAndTrackRedirectAsync("TEST.com", Slug)).Should().NotBeNull();
+
+        _domain.IsActive = false;
+        await _domainService.UpdateAsync(_domain);
 
         (await _linkService.ResolveAndTrackRedirectAsync("TEST.com", Slug)).Should().BeNull();
     }
@@ -331,6 +333,27 @@ public class RedirectResolutionTests
         _redirectCache.Set(Host, Slug, stored, TimeSpan.FromMinutes(10), snapshot);
 
         _redirectCache.TryGet(Host, Slug, out _).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task TryGet_ShouldFindTheLink_WhateverTheCaseOfTheHostAndOfTheSlug()
+    {
+        var stored = await AddLinkAsync();
+        _redirectCache.Set(Host, Slug, stored, TimeSpan.FromMinutes(10), _redirectCache.TakeSnapshot());
+
+        _redirectCache.TryGet("TEST.com", "Promo", out var link).Should().BeTrue();
+        link.Should().BeSameAs(stored);
+    }
+
+    [Test]
+    public async Task Remove_ShouldFindTheLink_WhateverTheCaseOfTheSlug()
+    {
+        var stored = await AddLinkAsync();
+        _redirectCache.Set(Host, "Promo", stored, TimeSpan.FromMinutes(10), _redirectCache.TakeSnapshot());
+
+        _redirectCache.Remove(Host, Slug);
+
+        _redirectCache.TryGet(Host, "Promo", out _).Should().BeFalse();
     }
 
     [Test]

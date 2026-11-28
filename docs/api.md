@@ -138,7 +138,7 @@ Request body:
 
 Field notes:
 
-- `destinationUrl` is required and must be an absolute `http://` or `https://` URL: any other scheme is rejected with `400 Bad Request`
+- `destinationUrl` is required and must be an absolute `http://` or `https://` URL: any other scheme is rejected with `400 Bad Request`. It is stored, and returned, as it is sent to the visitor: with ASCII characters only. `https://example.com/caffè` becomes `https://example.com/caff%C3%A8`, an international host its `xn--` form. The maximum length is checked on this form
 - `slug` is optional: when it is missing or empty, OpenShort generates one. It can contain only the letters `a`-`z` and `A`-`Z`, digits, `-` and `_`: any other character is rejected with `400 Bad Request`. It is stored in lower case and is unique within its domain. In a short URL the case of the slug does not matter: `/Promo` and `/promo` are the same link. A slug with other characters, stored by a version before 0.4.1, keeps working. For those slugs only: a letter with an accent is another slug with SQLite, while MySQL may read it as the plain letter
 - `domain` is required, and must already exist in OpenShort and be active
 - `redirectType: 301` means permanent redirect and is the default
@@ -254,7 +254,7 @@ Field notes:
 
 - `isActive: false` turns the domain off: none of its links redirects until it is active again, and no new link can be created on it. No link is deleted
 - `notFoundBehavior: 0` shows the OpenShort "link not found" page with status `404`
-- `notFoundBehavior: 1` redirects the visitor to `notFoundRedirectUrl`, which is then required and must be an absolute `http://` or `https://` URL
+- `notFoundBehavior: 1` redirects the visitor to `notFoundRedirectUrl`, which is then required and must be an absolute `http://` or `https://` URL. It is stored with ASCII characters only, like the destination of a link
 - All three fields are replaced: send `isActive` every time, or the domain is turned off
 - The host of a domain cannot be changed
 

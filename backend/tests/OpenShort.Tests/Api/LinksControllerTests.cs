@@ -181,6 +181,68 @@ public class LinksControllerTests
         _context.Links.Should().BeEmpty();
     }
 
+    // A Location header carries ASCII characters only: the destination is stored as it is sent
+    [TestCase("https://example.com/caffè?q=è", "https://example.com/caff%C3%A8?q=%C3%A8")]
+    [TestCase("https://example.com/caff%C3%A8", "https://example.com/caff%C3%A8")]
+    [TestCase("https://example.com/a%20b", "https://example.com/a%20b")]
+    [TestCase("https://münchen.example/x", "https://xn--mnchen-3ya.example/x")]
+    public async Task CreateLink_ShouldStoreTheDestination_WithAsciiCharactersOnly(string destinationUrl, string expected)
+    {
+        var dto = new CreateLinkDto { DestinationUrl = destinationUrl, Slug = "encoded", Domain = "localhost" };
+
+        var result = await _controller.CreateLink(dto);
+
+        result.Result.Should().BeOfType<CreatedAtActionResult>();
+        _context.ChangeTracker.Clear();
+        _context.Links.Single().DestinationUrl.Should().Be(expected);
+    }
+
+    // Each letter with an accent takes six characters once it is encoded
+    [Test]
+    public async Task CreateLink_ShouldReturnBadRequest_WhenTheEncodedUrlIsLongerThanTheColumn()
+    {
+        var dto = new CreateLinkDto
+        {
+            DestinationUrl = "https://example.com/" + new string('è', 400),
+            Slug = "long",
+            Domain = "localhost"
+        };
+
+        var result = await _controller.CreateLink(dto);
+
+        result.Result.Should().BeOfType<ObjectResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        _context.Links.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task UpdateLink_ShouldStoreTheNewDestination_WithAsciiCharactersOnly()
+    {
+        var link = await AddLinkAsync("https://example.com/");
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto { DestinationUrl = "https://example.com/caffè" });
+
+        result.Should().BeOfType<NoContentResult>();
+        _context.ChangeTracker.Clear();
+        (await _context.Links.FindAsync(link.Id))!.DestinationUrl.Should().Be("https://example.com/caff%C3%A8");
+    }
+
+    // A destination stored decoded by a version before 0.4.1: it is not rewritten by an update
+    // that does not change it, and the redirect encodes it
+    [Test]
+    public async Task UpdateLink_ShouldKeepADestinationStoredDecoded_WhenItIsNotChanged()
+    {
+        var link = await AddLinkAsync("https://example.com/caffè");
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto { DestinationUrl = "https://example.com/caffè", Title = "Renamed" });
+
+        result.Should().BeOfType<NoContentResult>();
+        _context.ChangeTracker.Clear();
+        var stored = await _context.Links.FindAsync(link.Id);
+        stored!.DestinationUrl.Should().Be("https://example.com/caffè");
+        stored.Title.Should().Be("Renamed");
+    }
+
     [Test]
     public async Task UpdateLink_ShouldReturnBadRequest_WhenTheNewUrlIsNotAnHttpOrHttpsUrl()
     {

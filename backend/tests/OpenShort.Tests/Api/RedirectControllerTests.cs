@@ -72,6 +72,80 @@ public class RedirectControllerTests
         redirectResult.Permanent.Should().BeTrue();
     }
 
+    // Destinations stored decoded by a version before 0.4.1: Kestrel refuses them in a header
+    [TestCase("https://example.com/caffè", "https://example.com/caff%C3%A8")]
+    [TestCase("https://example.com/?q=caffè&r=a b", "https://example.com/?q=caff%C3%A8&r=a%20b")]
+    [TestCase("https://münchen.example/x", "https://xn--mnchen-3ya.example/x")]
+    [TestCase("ftp://example.com/è", "ftp://example.com/%C3%A8")]
+    public async Task RedirectToUrl_ShouldEncodeTheDestination_WhenItWasStoredDecoded(string storedUrl, string expected)
+    {
+        // Arrange
+        var link = new Link { Slug = "go", DestinationUrl = storedUrl, Domain = "localhost", IsActive = true, RedirectType = RedirectType.Temporary };
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "go")).ReturnsAsync(link);
+
+        // Act
+        var result = await _controller.RedirectToUrl("go");
+
+        // Assert
+        result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be(expected);
+    }
+
+    // A destination that a header can carry is sent as it is stored, whatever its form
+    [TestCase("https://example.com/a b")]
+    [TestCase("https://example.com/caff%C3%A8?x=1%2F2")]
+    [TestCase("ftp://example.com/file")]
+    public async Task RedirectToUrl_ShouldSendTheDestinationAsItIsStored_WhenAHeaderCanCarryIt(string storedUrl)
+    {
+        // Arrange
+        var link = new Link { Slug = "go", DestinationUrl = storedUrl, Domain = "localhost", IsActive = true, RedirectType = RedirectType.Temporary };
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "go")).ReturnsAsync(link);
+
+        // Act
+        var result = await _controller.RedirectToUrl("go");
+
+        // Assert
+        result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be(storedUrl);
+    }
+
+    [Test]
+    public async Task RedirectToUrl_ShouldReturnNotFoundPage_WhenTheDestinationCannotBeWrittenInAHeader()
+    {
+        // Arrange
+        var link = new Link { Slug = "go", DestinationUrl = "caffè", Domain = "localhost", IsActive = true };
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "go")).ReturnsAsync(link);
+
+        // Act
+        var result = await _controller.RedirectToUrl("go");
+
+        // Assert
+        result.Should().BeOfType<ContentResult>()
+            .Which.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [TestCase("https://example.com/non-trovato/caffè", "https://example.com/non-trovato/caff%C3%A8")]
+    [TestCase("https://münchen.example/", "https://xn--mnchen-3ya.example/")]
+    public async Task RedirectToUrl_ShouldEncodeTheCustomNotFoundUrl_WhenItWasStoredDecoded(string storedUrl, string expected)
+    {
+        // Arrange
+        var domain = new Domain
+        {
+            Host = "localhost",
+            NotFoundBehavior = DomainNotFoundBehavior.RedirectToCustomUrl,
+            NotFoundRedirectUrl = storedUrl
+        };
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("localhost", "unknown")).ReturnsAsync((Link?)null);
+        _mockDomainService.Setup(s => s.GetByHostAsync("localhost")).ReturnsAsync(domain);
+
+        // Act
+        var result = await _controller.RedirectToUrl("unknown");
+
+        // Assert
+        result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be(expected);
+    }
+
     [Test]
     public async Task RedirectToUrl_ShouldReturnNotFoundPage_WhenLinkDoesNotExist()
     {

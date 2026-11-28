@@ -180,19 +180,14 @@ public class LinksController : ControllerBase
         return NoContent();
     }
 
-    // The destination as it is stored: scheme and host in lower case
+    // The destination as it is stored: scheme and host in lower case, ASCII characters only
     private static bool TryFormatDestinationUrl(string destinationUrl, out string formattedDestinationUrl)
     {
         formattedDestinationUrl = string.Empty;
-        if (!WebUrl.TryParse(destinationUrl, out _))
+        if (!WebUrl.TryParse(destinationUrl, out var url) || !WebUrl.TryEncode(url, out formattedDestinationUrl))
         {
             return false;
         }
-
-        var uriBuilder = new UriBuilder(destinationUrl);
-        uriBuilder.Scheme = uriBuilder.Scheme.ToLowerInvariant();
-        uriBuilder.Host = uriBuilder.Host.ToLowerInvariant();
-        formattedDestinationUrl = uriBuilder.Uri.ToString();
 
         // The stored form can be longer than the one that was sent
         return formattedDestinationUrl.Length <= LinkLimits.DestinationUrlMaxLength;

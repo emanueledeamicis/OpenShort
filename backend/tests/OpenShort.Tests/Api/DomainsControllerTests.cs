@@ -166,6 +166,32 @@ public class DomainsControllerTests
         dbDomain.NotFoundRedirectUrl.Should().Be("https://example.com/not-found");
     }
 
+    [TestCase("https://example.com/non-trovato/caffè", "https://example.com/non-trovato/caff%C3%A8")]
+    [TestCase("https://example.com/caff%C3%A8", "https://example.com/caff%C3%A8")]
+    [TestCase("https://münchen.example/", "https://xn--mnchen-3ya.example/")]
+    public async Task UpdateDomain_ShouldStoreTheCustomNotFoundUrl_WithAsciiCharactersOnly(string url, string expected)
+    {
+        // Arrange
+        var domain = new Domain { Host = "example.com", IsActive = true };
+        _context.Domains.Add(domain);
+        await _context.SaveChangesAsync();
+
+        var dto = new UpdateDomainDto
+        {
+            IsActive = true,
+            NotFoundBehavior = DomainNotFoundBehavior.RedirectToCustomUrl,
+            NotFoundRedirectUrl = url
+        };
+
+        // Act
+        var result = await _controller.UpdateDomain(domain.Id, dto);
+
+        // Assert
+        result.Should().BeOfType<OkObjectResult>();
+        _context.ChangeTracker.Clear();
+        (await _context.Domains.FindAsync(domain.Id))!.NotFoundRedirectUrl.Should().Be(expected);
+    }
+
     [TestCase(null)]
     [TestCase("")]
     [TestCase("not-a-url")]

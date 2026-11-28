@@ -75,6 +75,56 @@ public class RedirectResolutionTests
         _clickChannel.Reader.Count.Should().Be(1);
     }
 
+    [TestCase("TEST.com", "promo")]
+    [TestCase("test.com", "Promo")]
+    [TestCase("Test.Com", "PROMO")]
+    public async Task Resolve_ShouldReturnTheLink_WhateverTheCaseOfTheHostAndOfTheSlug(string host, string slug)
+    {
+        await AddLinkAsync();
+
+        var link = await _linkService.ResolveAndTrackRedirectAsync(host, slug);
+
+        link.Should().NotBeNull();
+        link!.Slug.Should().Be(Slug);
+    }
+
+    // The click is counted by looking the link up again: it must carry the host and the slug as they are stored
+    [Test]
+    public async Task Resolve_ShouldTrackTheClickOnTheStoredLink_WhenTheRequestIsInAnotherCase()
+    {
+        await AddLinkAsync();
+
+        await _linkService.ResolveAndTrackRedirectAsync("TEST.com", "Promo");
+
+        _clickChannel.Reader.TryRead(out var click).Should().BeTrue();
+        click!.Domain.Should().Be(Host);
+        click.Slug.Should().Be(Slug);
+    }
+
+    // One cache entry for a link: a change must not leave the link alive under another spelling of its slug
+    [Test]
+    public async Task Resolve_ShouldReturnNullAtOnce_WhenTheLinkIsTurnedOffAfterARequestInAnotherCase()
+    {
+        var stored = await AddLinkAsync();
+        (await _linkService.ResolveAndTrackRedirectAsync(Host, "Promo")).Should().NotBeNull();
+
+        stored.IsActive = false;
+        await _linkService.UpdateAsync(stored);
+
+        (await _linkService.ResolveAndTrackRedirectAsync(Host, "Promo")).Should().BeNull();
+        (await _linkService.ResolveAndTrackRedirectAsync(Host, Slug)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task Resolve_ShouldReturnNull_WhenTheDomainIsInactive_WhateverTheCaseOfTheHost()
+    {
+        _domain.IsActive = false;
+        await _context.SaveChangesAsync();
+        await AddLinkAsync();
+
+        (await _linkService.ResolveAndTrackRedirectAsync("TEST.com", Slug)).Should().BeNull();
+    }
+
     [Test]
     public async Task Resolve_ShouldAnswerFromTheCache_WhenTheLinkWasAlreadyResolved()
     {

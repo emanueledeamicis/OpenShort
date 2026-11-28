@@ -38,7 +38,8 @@ public class RedirectController : ControllerBase
                 return BadRequest();
             }
 
-            var host = Request.Host.Host; // Get domain without port
+            // Domain without port, in lower case as the hosts are stored
+            var host = Request.Host.Host.ToLowerInvariant();
 
             // Get link and track click internally
             var link = await _linkService.ResolveAndTrackRedirectAsync(host, slug);

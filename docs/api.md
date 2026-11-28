@@ -139,7 +139,7 @@ Request body:
 Field notes:
 
 - `destinationUrl` is required and must be an absolute URL: use `http://` or `https://`. The `javascript:`, `vbscript:` and `data:` schemes are rejected
-- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain. Build the short URL from the `slug` of the response, not from the one you sent: with SQLite the slug in the URL is case-sensitive, so `/Promo` does not find `promo`
+- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain. In a short URL the case of the slug does not matter: `/Promo` and `/promo` are the same link
 - `domain` is required, and must already exist in OpenShort and be active
 - `redirectType: 301` means permanent redirect and is the default
 - `redirectType: 302` means temporary redirect

@@ -55,6 +55,11 @@ public class LinkService : ILinkService
 
     public async Task<Link?> ResolveAndTrackRedirectAsync(string domain, string slug)
     {
+        // Hosts and slugs are stored in lower case: the request is compared in the same form,
+        // so /Promo finds promo on every database, and the click is counted on the stored link
+        domain = domain.ToLowerInvariant();
+        slug = slug.ToLowerInvariant();
+
         // 1. Try get from cache
         if (!_redirectCache.TryGet(domain, slug, out var link))
         {

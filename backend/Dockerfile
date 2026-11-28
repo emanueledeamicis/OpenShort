@@ -44,6 +44,12 @@ COPY --from=publish /app/publish .
 # Copy compiled frontend to Nginx web root
 COPY --from=frontend-build /app/dist/OpenShort.Frontend/browser /var/www/html
 
+# License notices of the third-party components shipped in the image
+COPY LICENSE THIRD-PARTY-NOTICES.md /app/licenses/
+COPY --from=frontend-build /app/dist/OpenShort.Frontend/3rdpartylicenses.txt /app/licenses/frontend-3rdpartylicenses.txt
+# The GPL asks for its text to travel with the MySQL connector: the file comes from the restored package
+COPY --from=publish /root/.nuget/packages/mysql.data/*/LICENSE /app/licenses/mysql-connector-net-LICENSE.txt
+
 # Copy configuration files
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

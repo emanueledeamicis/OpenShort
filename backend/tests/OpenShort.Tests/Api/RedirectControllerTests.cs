@@ -120,6 +120,29 @@ public class RedirectControllerTests
         contentResult.Content.Should().Contain("&lt;script&gt;");
     }
 
+    // The hosts are stored in lower case: the link and the settings of the domain are looked up in that form
+    [Test]
+    public async Task RedirectToUrl_ShouldLookTheHostUpInLowerCase_WhenTheRequestWritesItInUpperCase()
+    {
+        // Arrange
+        _controller.ControllerContext.HttpContext.Request.Host = new HostString("Short.Example.COM", 8080);
+        var domain = new Domain
+        {
+            Host = "short.example.com",
+            NotFoundBehavior = DomainNotFoundBehavior.RedirectToCustomUrl,
+            NotFoundRedirectUrl = "https://example.com/not-found"
+        };
+        _mockLinkService.Setup(s => s.ResolveAndTrackRedirectAsync("short.example.com", "unknown")).ReturnsAsync((Link?)null);
+        _mockDomainService.Setup(s => s.GetByHostAsync("short.example.com")).ReturnsAsync(domain);
+
+        // Act
+        var result = await _controller.RedirectToUrl("unknown");
+
+        // Assert
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("https://example.com/not-found");
+        _mockLinkService.Verify(s => s.ResolveAndTrackRedirectAsync("short.example.com", "unknown"), Times.Once);
+    }
+
     [Test]
     public async Task RedirectToUrl_ShouldRedirectToCustomUrl_WhenDomainHasCustomNotFoundUrl()
     {

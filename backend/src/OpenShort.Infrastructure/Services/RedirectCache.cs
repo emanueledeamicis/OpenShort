@@ -79,6 +79,6 @@ public class RedirectCache
         previous.Cancel();
     }
 
-    // A host name has no upper and lower case. A slug has, where the database tells them apart
-    private static string BuildKey(string domain, string slug) => $"{KeyPrefix}_{domain.ToLowerInvariant()}_{slug}";
+    // One entry for a link, however the host and the slug are written in the request
+    private static string BuildKey(string domain, string slug) => $"{KeyPrefix}_{domain.ToLowerInvariant()}_{slug.ToLowerInvariant()}";
 }

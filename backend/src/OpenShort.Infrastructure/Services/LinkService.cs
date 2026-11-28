@@ -55,6 +55,11 @@ public class LinkService : ILinkService
 
     public async Task<Link?> ResolveAndTrackRedirectAsync(string domain, string slug)
     {
+        // Hosts and slugs are stored in lower case: the request is compared in the same form,
+        // so /Promo finds promo on every database, and the click is counted on the stored link
+        domain = domain.ToLowerInvariant();
+        slug = slug.ToLowerInvariant();
+
         // 1. Try get from cache
         if (!_redirectCache.TryGet(domain, slug, out var link))
         {
@@ -70,11 +75,12 @@ public class LinkService : ILinkService
                 return null;
             }
 
-            // 3. Save to cache if valid
+            // 3. Save to cache if valid, under the host and the slug of the link: the database may match
+            // more spellings than the stored one (MySQL ignores accents), and only this entry is removed with the link
             var cacheDurationSeconds = await _settingService.GetSettingAsync(CacheDurationSecondsSettingKey, 60);
             if (cacheDurationSeconds > 0)
             {
-                _redirectCache.Set(domain, slug, link, TimeSpan.FromSeconds(cacheDurationSeconds), cacheSnapshot);
+                _redirectCache.Set(link.Domain, link.Slug, link, TimeSpan.FromSeconds(cacheDurationSeconds), cacheSnapshot);
             }
         }
 
@@ -87,8 +93,8 @@ public class LinkService : ILinkService
         // 4. Track click asynchronously
         var clickEvent = new ClickEvent
         {
-            Slug = slug,
-            Domain = domain,
+            Slug = link.Slug,
+            Domain = link.Domain,
             Timestamp = DateTime.UtcNow
         };
 

@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.Mvc.Infrastructure;
 namespace OpenShort.Api.Validation;
 
 // The answer to a request body that fails validation
-public static class ValidationProblem
+public static class ValidationProblemResponse
 {
-    // The standard validation problem, with the messages also in "detail":
-    // the dashboard and the other errors of the API say there what is wrong
+    // The standard validation problem, with the messages also in "detail", where the other errors
+    // of the API say what is wrong: a program that reads only "detail" gets the reason
     public static IActionResult Build(ActionContext context)
     {
         var factory = context.HttpContext.RequestServices.GetRequiredService<ProblemDetailsFactory>();

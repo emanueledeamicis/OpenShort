@@ -227,9 +227,68 @@ public class LinksControllerTests
         stored.IsActive.Should().BeFalse();
     }
 
-    private async Task<Link> AddLinkAsync(string destinationUrl)
+    // SQLite did not check the lengths: an earlier version could store a longer title or longer notes
+    [Test]
+    public async Task UpdateLink_ShouldKeepATitleAndNotesOverTheLimit_WhenTheyAreNotChanged()
     {
-        var link = new Link { Slug = "stored", Domain = "localhost", DestinationUrl = destinationUrl };
+        var title = new string('t', 101);
+        var notes = new string('n', 501);
+        var link = await AddLinkAsync("https://example.com/", title, notes);
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto
+        {
+            DestinationUrl = "https://example.com/",
+            Title = title,
+            Notes = notes,
+            IsActive = false
+        });
+
+        result.Should().BeOfType<NoContentResult>();
+        _context.ChangeTracker.Clear();
+        var stored = await _context.Links.FindAsync(link.Id);
+        stored!.Title.Should().Be(title);
+        stored.Notes.Should().Be(notes);
+        stored.IsActive.Should().BeFalse();
+    }
+
+    [TestCase(101, 0, "Title must be at most 100 characters.")]
+    [TestCase(0, 501, "Notes must be at most 500 characters.")]
+    public async Task UpdateLink_ShouldReturnBadRequest_WhenTheNewTitleOrNotesAreOverTheLimit(int titleLength, int notesLength, string expectedDetail)
+    {
+        var link = await AddLinkAsync("https://example.com/", "Title", "Notes");
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto
+        {
+            DestinationUrl = "https://example.com/",
+            Title = new string('t', titleLength),
+            Notes = new string('n', notesLength)
+        });
+
+        var problem = result.Should().BeOfType<ObjectResult>().Subject;
+        problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+        (problem.Value as ProblemDetails)!.Detail.Should().Be(expectedDetail);
+        _context.ChangeTracker.Clear();
+        (await _context.Links.FindAsync(link.Id))!.Title.Should().Be("Title");
+    }
+
+    [Test]
+    public async Task UpdateLink_ShouldStoreATitleAndNotes_AtTheMaximumLengths()
+    {
+        var link = await AddLinkAsync("https://example.com/");
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto
+        {
+            DestinationUrl = "https://example.com/",
+            Title = new string('t', 100),
+            Notes = new string('n', 500)
+        });
+
+        result.Should().BeOfType<NoContentResult>();
+    }
+
+    private async Task<Link> AddLinkAsync(string destinationUrl, string? title = null, string? notes = null)
+    {
+        var link = new Link { Slug = "stored", Domain = "localhost", DestinationUrl = destinationUrl, Title = title, Notes = notes };
         _context.Links.Add(link);
         await _context.SaveChangesAsync();
         return link;

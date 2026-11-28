@@ -172,7 +172,7 @@ Request body:
 
 All the fields of the body are replaced: a field left out goes back to its default (`redirectType` 301, `isActive` true, `title` and `notes` empty). The slug and the domain of a link cannot be changed.
 
-`destinationUrl`, `title` and `notes` follow the rules of the creation. One exception: a `destinationUrl` equal to the stored one is always accepted, so a link created by an earlier version with another scheme can still be renamed or turned off.
+`destinationUrl`, `title` and `notes` follow the rules of the creation. One exception: a value equal to the stored one, as the API returns it, is accepted as it is. A link created by an earlier version with another scheme, or with a title or notes over the maximum length, can still be renamed or turned off.
 
 The response is `204 No Content`.
 
@@ -230,7 +230,7 @@ Request body:
 }
 ```
 
-The host is stored in lower case. The domain is created active, and shows the OpenShort "link not found" page for links that do not exist. If the host already exists the response is `409 Conflict`.
+The host is stored in lower case and can be at most 255 characters: a longer one is rejected with `400 Bad Request`. The domain is created active, and shows the OpenShort "link not found" page for links that do not exist. If the host already exists the response is `409 Conflict`.
 
 ### Update Domain Settings
 
@@ -322,6 +322,16 @@ Each of these is the `detail` field of a problem details response.
   "errors": {
     "Title": ["The field Title must be a string with a maximum length of 100."]
   }
+}
+```
+
+### Invalid custom 404 URL
+
+`400 Bad Request`, when `notFoundBehavior` is `1` and `notFoundRedirectUrl` is missing or is not an absolute `http://` or `https://` URL:
+
+```json
+{
+  "detail": "An absolute http or https custom 404 URL is required when redirect mode is enabled."
 }
 ```
 

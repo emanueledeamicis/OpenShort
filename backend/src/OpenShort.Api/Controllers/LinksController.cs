@@ -14,6 +14,8 @@ public class LinksController : ControllerBase
 {
     private const string LinkNotFoundMessage = "Link not found.";
     private const string InvalidDestinationUrlMessage = "Destination URL must be an absolute http or https URL of at most 2048 characters.";
+    private static readonly string TitleTooLongMessage = $"Title must be at most {LinkLimits.TitleMaxLength} characters.";
+    private static readonly string NotesTooLongMessage = $"Notes must be at most {LinkLimits.NotesMaxLength} characters.";
     private const string DomainRequiredMessage = "Domain is required.";
     private const string DomainNotAuthorizedMessageTemplate = "Domain '{0}' is not authorized.";
     private const string DomainNotActiveMessageTemplate = "Domain '{0}' is not active.";
@@ -116,13 +118,24 @@ public class LinksController : ControllerBase
             return Problem(statusCode: StatusCodes.Status404NotFound, detail: LinkNotFoundMessage);
         }
 
-        // 2. URL Validation. A destination that is not changed is kept as it is: a link created
-        // by an earlier version with another scheme can still be renamed or turned off
+        // 2. Validation. A value that is not changed is kept as it is: a link stored by an earlier
+        // version with another scheme, or with a title or notes over the limit, can still be
+        // renamed or turned off
         var formattedDestinationUrl = existingLink.DestinationUrl;
         if (dto.DestinationUrl != existingLink.DestinationUrl &&
             !TryFormatDestinationUrl(dto.DestinationUrl, out formattedDestinationUrl))
         {
             return Problem(statusCode: StatusCodes.Status400BadRequest, detail: InvalidDestinationUrlMessage);
+        }
+
+        if (dto.Title != existingLink.Title && dto.Title?.Length > LinkLimits.TitleMaxLength)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: TitleTooLongMessage);
+        }
+
+        if (dto.Notes != existingLink.Notes && dto.Notes?.Length > LinkLimits.NotesMaxLength)
+        {
+            return Problem(statusCode: StatusCodes.Status400BadRequest, detail: NotesTooLongMessage);
         }
 
         // 3. Update fields
@@ -215,17 +228,15 @@ public class CreateLinkDto
     public bool IsActive { get; set; } = true;
 }
 
+// The lengths are checked by the controller, which accepts a value that is not changed
 public class UpdateLinkDto
 {
-    [StringLength(LinkLimits.DestinationUrlMaxLength)]
     public required string DestinationUrl { get; set; }
 
     public RedirectType RedirectType { get; set; } = RedirectType.Permanent;
 
-    [StringLength(LinkLimits.TitleMaxLength)]
     public string? Title { get; set; }
 
-    [StringLength(LinkLimits.NotesMaxLength)]
     public string? Notes { get; set; }
 
     public bool IsActive { get; set; } = true;

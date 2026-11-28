@@ -168,7 +168,7 @@ builder.Services.AddRateLimiter(OpenShort.Api.Auth.AuthProtection.ConfigureRateL
 
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
-        options.InvalidModelStateResponseFactory = OpenShort.Api.Validation.ValidationProblem.Build);
+        options.InvalidModelStateResponseFactory = OpenShort.Api.Validation.ValidationProblemResponse.Build);
 builder.Services.AddProblemDetails();
 
 

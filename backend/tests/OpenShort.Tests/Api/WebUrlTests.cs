@@ -11,6 +11,9 @@ public class WebUrlTests
     [TestCase("HTTPS://Example.com/Path")]
     [TestCase("http://localhost:8080/")]
     [TestCase("https://192.168.1.10/a")]
+    [TestCase(" https://example.com/ ")]
+    [TestCase("https://user:password@example.com/")]
+    [TestCase("https://münchen.example/caffè")]
     public void TryParse_ShouldAccept_AnAbsoluteHttpOrHttpsUrl(string value)
     {
         WebUrl.TryParse(value, out var url).Should().BeTrue();
@@ -33,6 +36,8 @@ public class WebUrlTests
     [TestCase("mailto:someone@example.com")]
     [TestCase("myapp://open/1")]
     [TestCase("http://")]
+    [TestCase("http:example.com")]
+    [TestCase("https:///path")]
     public void TryParse_ShouldRefuse_EverythingElse(string? value)
     {
         WebUrl.TryParse(value, out var url).Should().BeFalse();

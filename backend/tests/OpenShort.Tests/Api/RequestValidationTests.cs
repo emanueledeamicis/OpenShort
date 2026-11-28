@@ -44,19 +44,6 @@ public class RequestValidationTests
     }
 
     [Test]
-    public void UpdateLinkDto_ShouldNameEveryField_OverItsMaximumLength()
-    {
-        var dto = new UpdateLinkDto
-        {
-            DestinationUrl = "https://example.com/" + new string('a', 2029),
-            Title = new string('a', 101),
-            Notes = new string('a', 501)
-        };
-
-        Validate(dto).Should().BeEquivalentTo("DestinationUrl", "Title", "Notes");
-    }
-
-    [Test]
     public void CreateDomainDto_ShouldRefuseAHost_OverItsMaximumLength()
     {
         Validate(new CreateDomainDto { Host = new string('a', 255) }).Should().BeEmpty();
@@ -75,7 +62,7 @@ public class RequestValidationTests
         modelState.AddModelError("Notes", "The field Notes must be a string with a maximum length of 500.");
         var context = new ActionContext(httpContext, new RouteData(), new ActionDescriptor(), modelState);
 
-        var result = OpenShort.Api.Validation.ValidationProblem.Build(context);
+        var result = ValidationProblemResponse.Build(context);
 
         var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
         var problem = badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Subject;

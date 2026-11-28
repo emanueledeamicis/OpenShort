@@ -236,14 +236,19 @@ When a new version is available, follow these steps to update your installation:
    git pull
    ```
 
-2. **Rebuild and restart containers**
+2. **Build the image from the source**
    ```bash
-   docker compose down
-   docker compose build --no-cache
+   docker build -f backend/Dockerfile -t openshort:local .
+   ```
+
+3. **Restart with the new image**
+
+   The provided `docker-compose.yml` uses the published image: set `image: openshort:local` in it, then:
+   ```bash
    docker compose up -d
    ```
 
-3. **Verify the update**
+4. **Verify the update**
    ```bash
    docker compose ps
    docker compose logs --tail=100
@@ -292,12 +297,12 @@ dotnet test
 
 **Entity Framework migrations:**
 
-> **Note:** OpenShort dynamically selects the database provider. By default, running these commands applies SQLite migrations. To run MySQL migrations during development, set the `MYSQL_HOST` environment variable before running them.
+Each database provider has its own context and its own migrations: create a migration for both. Pending migrations are applied when the application starts.
 
 ```bash
 cd backend/src/OpenShort.Api
-dotnet ef migrations add MigrationName --project ../OpenShort.Infrastructure
-dotnet ef database update --project ../OpenShort.Infrastructure
+dotnet ef migrations add MigrationName --context SqliteDbContext --output-dir Data/Migrations/Sqlite --project ../OpenShort.Infrastructure
+dotnet ef migrations add MigrationName --context MySqlDbContext --output-dir Data/Migrations/MySql --project ../OpenShort.Infrastructure
 ```
 
 ### Frontend (Angular)
@@ -357,7 +362,7 @@ All environment variables can be configured directly inside the `environment:` s
 # Optional: None (default), Preferred, Required, VerifyCA or VerifyFull
 # - MYSQL_SSL_MODE=Required
 
-# Security
+# Keep Production: Development is for working on the code and exposes the API explorer
 - ASPNETCORE_ENVIRONMENT=Production
 
 # Recovery only: resets the admin password at every start, remove it after use (see "Admin Password Recovery")
@@ -367,7 +372,7 @@ All environment variables can be configured directly inside the `environment:` s
 # - ADMIN_2FA_RESET=true
 
 # Optional: reverse proxies allowed to report the client IP address (see "Trusted proxies")
-- TRUSTED_PROXIES=172.30.0.1
+# - TRUSTED_PROXIES=172.30.0.1
 ```
 
 > **Note:** If your passwords or keys contain `$` characters, you must escape them as `$$` in `docker-compose.yml` (for example, `Password$$` becomes `Password$$$$`) so Docker does not interpret them as variables.

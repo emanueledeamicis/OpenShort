@@ -2,7 +2,9 @@
 
 OpenShort is released under the [MIT License](LICENSE). The Docker image also contains the third-party components listed here, each under its own license.
 
-The exact versions are the ones resolved from `backend/src/*/*.csproj` and `frontend/package-lock.json` at build time. Inside the image, this file and the license texts collected by the frontend build are in `/app/licenses`.
+The exact versions are the ones resolved from `backend/src/*/*.csproj` and `frontend/package-lock.json` at build time. Inside the image, this file and the license texts mentioned below are in `/app/licenses`.
+
+The complete source code of OpenShort is at <https://github.com/emanueledeamicis/OpenShort>.
 
 ## Backend (.NET)
 
@@ -13,6 +15,7 @@ The exact versions are the ones resolved from `backend/src/*/*.csproj` and `fron
 | Microsoft.IdentityModel.*, System.IdentityModel.Tokens.Jwt | Microsoft | MIT |
 | Microsoft.OpenApi | Microsoft | MIT |
 | Swashbuckle.AspNetCore | domaindrivendev | MIT |
+| Swagger UI (embedded in Swashbuckle.AspNetCore) | SmartBear Software | Apache-2.0 |
 | SQLitePCLRaw | Eric Sink | Apache-2.0 |
 | SQLite (native library bundled by SQLitePCLRaw) | SQLite authors | Public domain |
 | MySql.EntityFrameworkCore (MySQL Connector/NET) | Oracle Corporation | GPL-2.0-only WITH Universal-FOSS-exception-1.0 |
@@ -21,15 +24,18 @@ The exact versions are the ones resolved from `backend/src/*/*.csproj` and `fron
 | Google.Protobuf | Google Inc. | BSD-3-Clause |
 | K4os.Compression.LZ4, K4os.Compression.LZ4.Streams, K4os.Hash.xxHash | Milosz Krajewski | MIT |
 | ZstdSharp.Port | Oleg Stepanischev | MIT |
+| MIT Kerberos libraries for Windows (shipped inside MySql.Data, not used on Linux) | Massachusetts Institute of Technology and others | MIT-style, see the license file of the connector |
 
 ### MySQL Connector/NET
 
-`MySql.EntityFrameworkCore` and `MySql.Data` are distributed unmodified, as published by Oracle on NuGet, under the GNU General Public License version 2 with the [Universal FOSS Exception, version 1.0](https://oss.oracle.com/licenses/universal-foss-exception/). The exception allows them to be combined and distributed with software released under an open source license such as the MIT License of OpenShort, without that software becoming subject to the GPL. The connector itself stays under the GPL.
+`MySql.EntityFrameworkCore` 10.0.12 and `MySql.Data` 26.10.0 are distributed unmodified, as published by Oracle on NuGet, under the GNU General Public License version 2 with the Universal FOSS Exception, version 1.0. They remain under that license.
 
-- Source code: <https://github.com/mysql/mysql-connector-net>
-- License text: <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
+OpenShort uses the connector only through its public interfaces, without copying any of its code, and is itself distributed with complete source under the MIT License at the address above. For this combination OpenShort relies on the Universal FOSS Exception.
 
-The four packages listed after them in the table are dependencies of the connector.
+- License text (GPL version 2, the exception, and the notices of the components the connector includes): `/app/licenses/mysql-connector-net-LICENSE.txt` inside the image, the `LICENSE` file of the NuGet package
+- Source code of the distributed version: <https://github.com/mysql/mysql-connector-net/tree/26.10.0>
+
+The components in the rows after them in the table come with the connector. Some of the Microsoft packages in the second row do as well.
 
 ## Frontend (dashboard)
 

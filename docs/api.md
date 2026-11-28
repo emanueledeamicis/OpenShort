@@ -139,11 +139,12 @@ Request body:
 Field notes:
 
 - `destinationUrl` is required and must be an absolute URL: use `http://` or `https://`. The `javascript:`, `vbscript:` and `data:` schemes are rejected
-- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain
+- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain. Build the short URL from the `slug` of the response, not from the one you sent: with SQLite the slug in the URL is case-sensitive, so `/Promo` does not find `promo`
 - `domain` is required, and must already exist in OpenShort and be active
 - `redirectType: 301` means permanent redirect and is the default
 - `redirectType: 302` means temporary redirect
-- `title` (up to 100 characters) and `notes` (up to 500) are optional
+- `title` and `notes` are optional
+- Keep within these lengths: `slug` 50 characters, `destinationUrl` 2048, `title` 100, `notes` 500. The API does not check them yet: a longer value may be stored as it is or cause a server error, depending on the database
 - `isActive` controls whether the short link can be resolved publicly; the default is `true`
 - a link that is not active or has expired, and every link of a domain that is not active, answers like a link that does not exist: the 404 page, or the custom URL set for the domain
 
@@ -306,6 +307,26 @@ Each of these is the `detail` field of a problem details response.
 ```json
 {
   "detail": "Invalid Destination URL format."
+}
+```
+
+### URL scheme not allowed
+
+`400 Bad Request`, for a `javascript:`, `vbscript:` or `data:` destination:
+
+```json
+{
+  "detail": "URL scheme is not allowed."
+}
+```
+
+### Domain missing
+
+`400 Bad Request`, if `domain` is missing or empty:
+
+```json
+{
+  "detail": "Domain is required."
 }
 ```
 

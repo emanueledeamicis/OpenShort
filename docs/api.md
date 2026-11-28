@@ -6,7 +6,10 @@ It intentionally focuses on API key usage, not on the JWT-protected dashboard en
 
 ## Base URLs
 
-- Integration API base URL: `http://<server-ip>/api`
+The API is served by the backend port of the container (`8080`), the same one that answers the short links. The base URL depends on how you published that port:
+
+- `http://<server-ip>/api` with the provided `docker-compose.yml`, which maps it to port `80`
+- `http://<server-ip>:8080/api` with the `docker run` examples of the README
 
 Examples below assume:
 
@@ -24,54 +27,76 @@ X-Api-Key: <api-key>
 
 ## Getting an API Key
 
-API keys are generated from the OpenShort dashboard by an authenticated administrator.
+The API key is generated from the OpenShort dashboard by a signed-in user.
 
 To get one:
 
 1. Sign in to the dashboard
 2. Open the **Security** section
-3. Generate the API key and save it securely
+3. Generate the API key and save it securely: it is shown only once
 
 Use that key in every integration request through the `X-Api-Key` header.
 
-Once generated, use the key in external services, scripts, automation tools, internal portals, or custom apps.
-
 Important:
 
-- Store the API key securely
-- Treat it like a secret
+- An installation has one API key, shared by all its users and integrations
+- Store the API key securely and treat it like a secret
 - Regenerating the key invalidates the previous one
+- The key cannot be generated or read through the API itself
 
 ## What Is Covered Here
 
 This integration guide documents:
 
 - API key authentication format
-- Link management endpoints that support API key authentication
+- Link and domain endpoints, which accept the API key
 
-It does **not** document:
+It does **not** document the endpoints that accept the dashboard login only:
 
-- Dashboard login with JWT
-- First-run admin setup
-- Admin user management
-- Dashboard-only settings and maintenance flows
+- Dashboard login with JWT and first-run admin setup
+- User management
+- Two-factor authentication and password change
+- Application settings
 
 ## Common Response Behavior
 
-- `200 OK` for successful reads and most successful writes
-- `201 Created` for newly created resources
-- `204 No Content` for successful deletes or updates with no response body
+- `200 OK` for successful reads and for a domain update
+- `201 Created` for newly created resources, with the resource in the body
+- `204 No Content` for successful deletes and for a link update
 - `400 Bad Request` for invalid input or validation issues
 - `401 Unauthorized` for a missing or invalid API key
 - `404 Not Found` when a resource does not exist
 - `409 Conflict` when the request conflicts with existing data
 - `500 Internal Server Error` for unexpected server-side failures
 
-OpenShort often returns RFC 7807-style problem details for API errors.
+Errors are returned as RFC 7807 problem details. The reason is in the `detail` field, or in `errors` when the request body cannot be read (for example a required field is missing).
 
 ## Link Management Endpoints
 
 These endpoints are the most relevant for integrations that create or manage short links programmatically.
+
+A link is returned in this form:
+
+```json
+{
+  "id": 12,
+  "slug": "promo",
+  "destinationUrl": "https://example.com/landing-page",
+  "domain": "short.example.com",
+  "createdAt": "2026-11-28T10:15:00.1078548",
+  "expiresAt": null,
+  "isActive": true,
+  "redirectType": 301,
+  "title": "Campaign landing page",
+  "notes": "Spring campaign",
+  "clickCount": 42,
+  "lastAccessedAt": "2026-11-28T11:02:31.0747732"
+}
+```
+
+The short URL of a link is `https://<domain>/<slug>`. `clickCount` and `lastAccessedAt` are updated shortly after each visit. `expiresAt` cannot be set through the API yet.
+
+Dates and times are in UTC, also when they come without the `Z` suffix.
 
 ### List Links
 
@@ -79,6 +104,8 @@ These endpoints are the most relevant for integrations that create or manage sho
 GET /api/links
 X-Api-Key: <api-key>
 ```
+
+Returns all the links.
 
 ### Get Link by ID
 
@@ -111,13 +138,16 @@ Request body:
 
 Field notes:
 
-- `destinationUrl` must be an absolute `http://` or `https://` URL
-- `slug` is optional
-- `domain` must already exist in OpenShort and be active
-- `redirectType: 301` means permanent redirect
+- `destinationUrl` is required and must be an absolute URL: use `http://` or `https://`. The `javascript:`, `vbscript:` and `data:` schemes are rejected
+- `slug` is optional: when it is missing or empty, OpenShort generates one. It is stored in lower case and is unique within its domain
+- `domain` is required, and must already exist in OpenShort and be active
+- `redirectType: 301` means permanent redirect and is the default
 - `redirectType: 302` means temporary redirect
-- `isActive` controls whether the short link can be resolved publicly
+- `title` (up to 100 characters) and `notes` (up to 500) are optional
+- `isActive` controls whether the short link can be resolved publicly; the default is `true`
 - a link that is not active or has expired, and every link of a domain that is not active, answers like a link that does not exist: the 404 page, or the custom URL set for the domain
+
+The response is `201 Created` with the link, including its `id` and the slug that was generated.
 
 ### Update Link
 
@@ -139,6 +169,10 @@ Request body:
 }
 ```
 
+All the fields of the body are replaced: a field left out goes back to its default (`redirectType` 301, `isActive` true, `title` and `notes` empty). The slug and the domain of a link cannot be changed.
+
+The response is `204 No Content`.
+
 ### Delete Link
 
 ```http
@@ -149,6 +183,19 @@ X-Api-Key: <api-key>
 ## Domain Endpoints
 
 These endpoints are useful if your integration also manages custom domains inside OpenShort.
+
+A domain is returned in this form:
+
+```json
+{
+  "id": 3,
+  "host": "short.example.com",
+  "isActive": true,
+  "notFoundBehavior": 0,
+  "notFoundRedirectUrl": null,
+  "createdAt": "2026-11-28T10:00:00.9778134"
+}
+```
 
 ### List Domains
 
@@ -180,6 +227,36 @@ Request body:
 }
 ```
 
+The host is stored in lower case. The domain is created active, and shows the OpenShort "link not found" page for links that do not exist. If the host already exists the response is `409 Conflict`.
+
+### Update Domain Settings
+
+```http
+PUT /api/domains/{id}
+X-Api-Key: <api-key>
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "isActive": true,
+  "notFoundBehavior": 1,
+  "notFoundRedirectUrl": "https://example.com/not-found"
+}
+```
+
+Field notes:
+
+- `isActive: false` turns the domain off: none of its links redirects until it is active again, and no new link can be created on it. No link is deleted
+- `notFoundBehavior: 0` shows the OpenShort "link not found" page with status `404`
+- `notFoundBehavior: 1` redirects the visitor to `notFoundRedirectUrl`, which is then required and must be an absolute URL
+- All three fields are replaced: send `isActive` every time, or the domain is turned off
+- The host of a domain cannot be changed
+
+The response is `200 OK` with the domain.
+
 ### Get Link Count for a Domain
 
 ```http
@@ -187,12 +264,16 @@ GET /api/domains/{id}/link-count
 X-Api-Key: <api-key>
 ```
 
+Returns the number of links of the domain, as a plain number.
+
 ### Delete Domain
 
 ```http
 DELETE /api/domains/{id}
 X-Api-Key: <api-key>
 ```
+
+Deleting a domain also deletes all its links.
 
 ## Typical Integration Flow
 
@@ -216,9 +297,11 @@ curl -X POST http://localhost/api/links \
 
 ## Example Error Cases
 
+Each of these is the `detail` field of a problem details response.
+
 ### Invalid destination URL
 
-You may receive:
+`400 Bad Request`:
 
 ```json
 {
@@ -228,7 +311,7 @@ You may receive:
 
 ### Domain not authorized
 
-If the requested domain does not exist in OpenShort:
+`400 Bad Request`, if the requested domain does not exist in OpenShort:
 
 ```json
 {
@@ -236,9 +319,19 @@ If the requested domain does not exist in OpenShort:
 }
 ```
 
+### Domain not active
+
+`400 Bad Request`, if the requested domain exists but is turned off:
+
+```json
+{
+  "detail": "Domain 'short.example.com' is not active."
+}
+```
+
 ### Slug conflict
 
-If the slug is already used on the same domain:
+`409 Conflict`, if the slug is already used on the same domain:
 
 ```json
 {
@@ -248,6 +341,6 @@ If the slug is already used on the same domain:
 
 ## Notes
 
-- Endpoint behavior can evolve between releases
-- For the most precise schema, use the running API and Swagger/OpenAPI output during development
+- Endpoint behavior can evolve between releases: the release notes list the changes
+- The published image does not expose Swagger/OpenAPI. It is available when the backend runs in the `Development` environment
 - This document is intended as an integration guide for API key usage

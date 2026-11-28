@@ -6,6 +6,8 @@
 !backend/src
 !frontend
 !nginx.conf
+!LICENSE
+!THIRD-PARTY-NOTICES.md
 !supervisord.conf
 
 # Build output and local files inside those folders

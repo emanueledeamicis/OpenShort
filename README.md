@@ -33,7 +33,10 @@ OpenShort is a good fit for:
 - Create and manage short links from a web dashboard
 - Custom domain support for branded short URLs
 - Permanent (301) and temporary (302) redirects
-- JWT-based authentication with ASP.NET Identity
+- Click count and last access date for each link
+- For each domain, a "link not found" page or a redirect to a URL of your choice
+- API key for external integrations
+- JWT-based authentication with ASP.NET Identity, with optional two-factor authentication
 - Modern UI built with Angular and PrimeNG
 - Single-container architecture with backend and frontend in one image
 - Flexible storage: zero-config SQLite by default or external MySQL
@@ -45,7 +48,6 @@ OpenShort is a good fit for:
 - .NET 10 (ASP.NET Core Web API)
 - Entity Framework Core
 - ASP.NET Identity for authentication
-- FluentValidation
 - NUnit for testing
 
 **Frontend:**
@@ -93,6 +95,8 @@ When you open the dashboard for the first time, you will be prompted to choose t
 
 You can delete the `admin` account: create another administrator in the dashboard **Users** section, sign in with it and delete `admin` from there. It is not created again at the next start, unless you ask for it with the [admin password recovery](#admin-password-recovery).
 
+Deleting a user also signs them out: their open sessions stop working at once.
+
 After signing in, open the dashboard **Security** section to generate or manage the API key used by external integrations. Programmatic requests to the integration API must send that key in the `X-Api-Key` header.
 
 ### Stopping the application
@@ -127,6 +131,13 @@ docker run -d \
   --restart unless-stopped \
   catokx/openshort:latest
 ```
+
+With these port mappings:
+
+- Dashboard (frontend): `http://<server-ip>:8081`
+- API and redirects (backend): `http://<server-ip>:8080`
+
+To serve short links on port 80, as the provided `docker-compose.yml` does, use `-p 80:8080` instead of `-p 8080:8080`.
 
 #### B. MySQL mode
 
@@ -204,7 +215,7 @@ If you started OpenShort with `docker run`, update it like this:
    docker rm openshort
    ```
 
-3. **Start a new container with the same ports, volumes, and environment variables**
+3. **Start a new container with the same ports, volumes, and environment variables** you used before, for example:
    ```bash
    docker run -d \
      --name openshort \
@@ -441,7 +452,7 @@ server {
     # Expose only REST APIs and short link redirects to the public internet.
     # Keep the dashboard private when possible.
     location / {
-        proxy_pass http://localhost:80;
+        proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -449,6 +460,8 @@ server {
     }
 }
 ```
+
+The example forwards to port `8080` of the host, so OpenShort must publish its API there (`8080:8080`). The provided `docker-compose.yml` publishes it on port `80`, which a proxy on the same host needs for itself: change that mapping as in the [trusted proxies](#trusted-proxies) example below.
 
 #### Trusted proxies
 
@@ -512,6 +525,8 @@ Once your domain is pointing to the server, sign in to the OpenShort dashboard a
 ## License
 
 MIT License - see the [LICENSE](LICENSE) file for details.
+
+The Docker image also contains third-party components under their own licenses: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Author
 

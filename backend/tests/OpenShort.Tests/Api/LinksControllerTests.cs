@@ -268,7 +268,9 @@ public class LinksControllerTests
         problem.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         (problem.Value as ProblemDetails)!.Detail.Should().Be(expectedDetail);
         _context.ChangeTracker.Clear();
-        (await _context.Links.FindAsync(link.Id))!.Title.Should().Be("Title");
+        var stored = await _context.Links.FindAsync(link.Id);
+        stored!.Title.Should().Be("Title");
+        stored.Notes.Should().Be("Notes");
     }
 
     [Test]
@@ -284,6 +286,26 @@ public class LinksControllerTests
         });
 
         result.Should().BeOfType<NoContentResult>();
+        _context.ChangeTracker.Clear();
+        var stored = await _context.Links.FindAsync(link.Id);
+        stored!.Title.Should().Be(new string('t', 100));
+        stored.Notes.Should().Be(new string('n', 500));
+    }
+
+    // SQLite did not check the lengths: an earlier version could store a longer destination
+    [Test]
+    public async Task UpdateLink_ShouldKeepADestinationOverTheLimit_WhenItIsNotChanged()
+    {
+        var destinationUrl = "https://example.com/" + new string('a', 2100);
+        var link = await AddLinkAsync(destinationUrl);
+
+        var result = await _controller.UpdateLink(link.Id, new UpdateLinkDto { DestinationUrl = destinationUrl, IsActive = false });
+
+        result.Should().BeOfType<NoContentResult>();
+        _context.ChangeTracker.Clear();
+        var stored = await _context.Links.FindAsync(link.Id);
+        stored!.DestinationUrl.Should().Be(destinationUrl);
+        stored.IsActive.Should().BeFalse();
     }
 
     private async Task<Link> AddLinkAsync(string destinationUrl, string? title = null, string? notes = null)
